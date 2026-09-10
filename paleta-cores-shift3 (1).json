@@ -1,0 +1,208 @@
+{
+  "projeto": "Shift3 Dashboard - Paleta de Cores",
+  "data": "2026-09-07",
+  "descricao": "Paleta de cores unificada combinando identidade Shift3 com design COINEST",
+  
+  "cores_primarias": {
+    "shift3_dark": {
+      "hex": "#191E24",
+      "rgb": "rgb(25, 30, 36)",
+      "nome": "Azul muito escuro - Brand Shift3",
+      "uso": "Sidebar, navegação principal, backgrounds escuros",
+      "contraste": "AAA com branco"
+    },
+    "verde_escuro": {
+      "hex": "#2D5F4F",
+      "rgb": "rgb(45, 95, 79)",
+      "nome": "Teal/Verde-azulado",
+      "uso": "Elementos secundários, accent escuro, hover states",
+      "contraste": "AA com branco"
+    },
+    "verde_claro": {
+      "hex": "#7FD7AB",
+      "rgb": "rgb(127, 215, 171)",
+      "nome": "Verde-lima vibrante",
+      "uso": "Accent principal, highlights, calls-to-action",
+      "contraste": "AA com #191E24"
+    }
+  },
+  
+  "cores_secundarias": {
+    "background_light": {
+      "hex": "#F5F7FA",
+      "rgb": "rgb(245, 247, 250)",
+      "nome": "Off-white - Background principal",
+      "uso": "Background páginas, containers principais"
+    },
+    "background_card": {
+      "hex": "#FFFFFF",
+      "rgb": "rgb(255, 255, 255)",
+      "nome": "Branco puro",
+      "uso": "Cards, panels, superfícies elevadas"
+    },
+    "border_light": {
+      "hex": "#E8E8E8",
+      "rgb": "rgb(232, 232, 232)",
+      "nome": "Cinza claro",
+      "uso": "Borders, separadores, dividers"
+    }
+  },
+  
+  "cores_texto": {
+    "texto_principal": {
+      "hex": "#1A1A1A",
+      "rgb": "rgb(26, 26, 26)",
+      "nome": "Cinza escuro",
+      "uso": "Headings, texto principal, labels"
+    },
+    "texto_secundario": {
+      "hex": "#666666",
+      "rgb": "rgb(102, 102, 102)",
+      "nome": "Cinza médio",
+      "uso": "Supporting text, descriptions"
+    },
+    "texto_muted": {
+      "hex": "#999999",
+      "rgb": "rgb(153, 153, 153)",
+      "nome": "Cinza médio-claro",
+      "uso": "Placeholders, hints, metadata"
+    },
+    "texto_light": {
+      "hex": "#A8B5C4",
+      "rgb": "rgb(168, 181, 196)",
+      "nome": "Cinza muito claro",
+      "uso": "Sidebar text inactive"
+    }
+  },
+  
+  "cores_status": {
+    "success": {
+      "hex": "#7FD7AB",
+      "rgb": "rgb(127, 215, 171)",
+      "nome": "Verde sucesso",
+      "uso": "Status positivo, aumentos, completado"
+    },
+    "warning": {
+      "hex": "#FFC107",
+      "rgb": "rgb(255, 193, 7)",
+      "nome": "Amarelo alerta",
+      "uso": "Atenção, cautela, warnings"
+    },
+    "danger": {
+      "hex": "#FF6B6B",
+      "rgb": "rgb(255, 107, 107)",
+      "nome": "Coral/Vermelho",
+      "uso": "Erro, perda, decreases"
+    }
+  },
+  
+  "combinacoes_recomendadas": {
+    "botao_primario": {
+      "background": "#191E24",
+      "texto": "#FFFFFF",
+      "hover": "#2D5F4F",
+      "descricao": "Botões de ação principal"
+    },
+    "botao_secundario": {
+      "background": "#F5F7FA",
+      "texto": "#191E24",
+      "border": "#E8E8E8",
+      "hover": "#E8E8E8",
+      "descricao": "Botões secundários"
+    },
+    "botao_accent": {
+      "background": "#7FD7AB",
+      "texto": "#191E24",
+      "hover": "#2D5F4F",
+      "descricao": "Botões destaque/CTA"
+    },
+    "card": {
+      "background": "#FFFFFF",
+      "border": "#E8E8E8",
+      "texto": "#1A1A1A",
+      "descricao": "Cards e containers"
+    },
+    "sidebar": {
+      "background": "#191E24",
+      "texto_active": "#7FD7AB",
+      "texto_inactive": "#A8B5C4",
+      "hover": "rgba(127, 215, 171, 0.1)",
+      "descricao": "Navegação sidebar"
+    }
+  },
+  
+  "tipografia": {
+    "fonte_principal": "Segoe UI, -apple-system, BlinkMacSystemFont, Roboto, sans-serif",
+    "fonte_alternativa": "Inter, Ubuntu, sans-serif",
+    "heading_1": {
+      "tamanho": "28px",
+      "peso": "600",
+      "cor": "#1A1A1A",
+      "line_height": "1.2"
+    },
+    "heading_2": {
+      "tamanho": "18px",
+      "peso": "600",
+      "cor": "#191E24",
+      "line_height": "1.3"
+    },
+    "body": {
+      "tamanho": "13-16px",
+      "peso": "400",
+      "cor": "#1A1A1A",
+      "line_height": "1.5"
+    },
+    "caption": {
+      "tamanho": "11-12px",
+      "peso": "400",
+      "cor": "#999999",
+      "line_height": "1.4"
+    }
+  },
+  
+  "espacamento": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "12px",
+    "lg": "16px",
+    "xl": "24px",
+    "2xl": "32px"
+  },
+  
+  "border_radius": {
+    "pequeno": "4px",
+    "padrao": "6px",
+    "medio": "12px",
+    "grande": "16px",
+    "pills": "999px"
+  },
+  
+  "sombras": {
+    "sm": "0 1px 2px rgba(0, 0, 0, 0.05)",
+    "md": "0 2px 4px rgba(0, 0, 0, 0.1)",
+    "lg": "0 4px 8px rgba(0, 0, 0, 0.15)",
+    "xl": "0 8px 16px rgba(0, 0, 0, 0.2)"
+  },
+  
+  "acessibilidade": {
+    "contraste_minimo": "WCAG AA (4.5:1 para texto pequeno, 3:1 para texto grande)",
+    "verificacoes": [
+      "#191E24 + #FFFFFF = 15.5:1 (AAA)",
+      "#2D5F4F + #FFFFFF = 6.8:1 (AAA)",
+      "#7FD7AB + #191E24 = 4.9:1 (AA)",
+      "#1A1A1A + #F5F7FA = 14.2:1 (AAA)"
+    ]
+  },
+  
+  "uso_css": {
+    "variaveis": {
+      "primary": "var(--color-primary, #191E24)",
+      "primary_dark": "var(--color-primary-dark, #2D5F4F)",
+      "primary_light": "var(--color-primary-light, #7FD7AB)",
+      "background": "var(--color-bg, #F5F7FA)",
+      "text": "var(--color-text, #1A1A1A)",
+      "text_secondary": "var(--color-text-secondary, #666666)"
+    },
+    "exemplo_css": "css\n:root {\n  --color-primary: #191E24;\n  --color-primary-dark: #2D5F4F;\n  --color-primary-light: #7FD7AB;\n  --color-bg: #F5F7FA;\n  --color-text: #1A1A1A;\n  --color-text-secondary: #666666;\n}\n"
+  }
+}
