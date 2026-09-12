@@ -1,7 +1,7 @@
 <template>
   <div>
     <BasePageHeader title="Vendedores" subtitle="Representantes e vendedores da empresa">
-      <template #actions>
+      <template v-if="auth.podeIncluirModulo('vendedores')" #actions>
         <BaseButton to="/vendedores/novo" variant="primary" icon-left="heroicons:plus">
           Novo vendedor
         </BaseButton>
@@ -15,6 +15,8 @@
     <VendedoresList
       :itens="itens"
       :carregando="carregando"
+      :pode-editar="auth.podeEditarModulo('vendedores')"
+      :pode-excluir="auth.podeExcluirModulo('vendedores')"
       @editar="(id) => navigateTo(`/vendedores/${id}`)"
       @excluir="pedirExclusao"
     />
@@ -34,10 +36,12 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
 import type { Vendedor } from '~/types/vendedor'
+import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({ layout: 'dashboard', title: 'Vendedores' })
 
 const { itens, carregando, filtros, carregar, remover } = useVendedores()
+const auth = useAuthStore()
 const toast = useToast()
 
 onMounted(() => carregar())

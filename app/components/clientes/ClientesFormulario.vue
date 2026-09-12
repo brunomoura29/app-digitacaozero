@@ -78,7 +78,17 @@
     <!-- ───── Observações ───── -->
     <section class="space-y-4">
       <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Observações</p>
-      <VendedoresVendedorPicker v-model="form.vendedor_id" />
+
+      <!-- vendedor logado: a carteira é sempre a dele própria, não dá pra reatribuir -->
+      <div
+        v-if="auth.isVendedor"
+        class="flex items-center gap-2 rounded-medium border border-shift3-border bg-shift3-bg-light px-4 py-3 text-sm"
+      >
+        <Icon name="heroicons:user" class="h-4 w-4 text-shift3-text-muted" />
+        <span class="text-shift3-text-muted">Vendedor:</span>
+        <span class="font-medium text-shift3-text">{{ auth.nome }}</span>
+      </div>
+      <VendedoresVendedorPicker v-else v-model="form.vendedor_id" />
       <BaseTextarea
         v-model="form.observacoes"
         placeholder="Anotações internas sobre o cliente…"
@@ -114,6 +124,9 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import type { Cliente, ClienteInput } from '~/types/cliente'
+import { useAuthStore } from '~/stores/auth'
+
+const auth = useAuthStore()
 
 const props = withDefaults(
   defineProps<{
@@ -136,7 +149,7 @@ function branco() {
     inscricao_estadual: '',
     email: '',
     telefone: '',
-    vendedor_id: null as string | null,
+    vendedor_id: auth.isVendedor ? (auth.perfil?.vendedor_id ?? null) : (null as string | null),
     endereco: {} as ClienteInput['endereco'],
     observacoes: '',
     ativo: true
@@ -216,7 +229,8 @@ function onSubmit() {
     inscricao_estadual: limpo(form.inscricao_estadual),
     email: limpo(form.email),
     telefone: form.telefone ? soDigitos(form.telefone) : null,
-    vendedor_id: form.vendedor_id,
+    // vendedor logado nunca reatribui pra outro — trava no próprio id, ignorando o form
+    vendedor_id: auth.isVendedor ? (auth.perfil?.vendedor_id ?? null) : form.vendedor_id,
     endereco,
     observacoes: limpo(form.observacoes),
     ativo: form.ativo

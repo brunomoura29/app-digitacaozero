@@ -1,4 +1,15 @@
-export type NivelPermissao = 'nenhum' | 'ver' | 'editar'
+export type AcaoPermissao = 'ver' | 'incluir' | 'editar' | 'deletar'
+
+export interface PermissaoModulo {
+  ver: boolean
+  incluir: boolean
+  editar: boolean
+  deletar: boolean
+}
+
+export function permissaoModuloVazia(): PermissaoModulo {
+  return { ver: false, incluir: false, editar: false, deletar: false }
+}
 
 export interface ModuloSistema {
   chave: string
@@ -15,12 +26,19 @@ export const MODULOS_SISTEMA: ModuloSistema[] = [
   { chave: 'relatorios', label: 'Relatórios' }
 ]
 
+export const ACOES_PERMISSAO: { chave: AcaoPermissao; label: string }[] = [
+  { chave: 'ver', label: 'Ver' },
+  { chave: 'incluir', label: 'Incluir' },
+  { chave: 'editar', label: 'Editar' },
+  { chave: 'deletar', label: 'Deletar' }
+]
+
 export interface Funcao {
   id: string
   empresa_id: string
   nome: string
   descricao: string | null
-  permissoes: Record<string, NivelPermissao>
+  permissoes: Record<string, PermissaoModulo>
   criado_em: string
   atualizado_em: string
 }
@@ -29,7 +47,7 @@ export interface Funcao {
 export interface FuncaoInput {
   nome: string
   descricao: string | null
-  permissoes: Record<string, NivelPermissao>
+  permissoes: Record<string, PermissaoModulo>
 }
 
 export interface FuncaoFiltros {

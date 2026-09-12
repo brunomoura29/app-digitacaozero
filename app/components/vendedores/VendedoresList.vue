@@ -33,9 +33,14 @@
             class="border-b border-shift3-border/60 transition hover:bg-shift3-bg-light"
           >
             <td class="px-4 py-3" style="width: 40%">
-              <button class="text-base font-semibold text-shift3-text hover:text-shift3-teal" @click="emit('editar', v.id)">
+              <button
+                v-if="podeEditar"
+                class="text-base font-semibold text-shift3-text hover:text-shift3-teal"
+                @click="emit('editar', v.id)"
+              >
                 {{ v.nome }}
               </button>
+              <span v-else class="text-base font-semibold text-shift3-text">{{ v.nome }}</span>
             </td>
             <td class="px-4 py-3 text-sm text-shift3-text-secondary" style="width: 22%">{{ v.email || '—' }}</td>
             <td class="px-4 py-3 text-shift3-text-secondary" style="width: 18%">{{ formatTel(v.telefone) || '—' }}</td>
@@ -49,14 +54,7 @@
               </span>
             </td>
             <td class="px-4 py-3 text-right" style="width: 3%">
-              <BaseDropdown
-                align="right"
-                :items="[
-                  { label: 'Editar', icon: 'heroicons:pencil-square', onClick: () => emit('editar', v.id) },
-                  { divider: true },
-                  { label: 'Excluir', icon: 'heroicons:trash', danger: true, onClick: () => emit('excluir', v) }
-                ]"
-              >
+              <BaseDropdown v-if="podeEditar || podeExcluir" align="right" :items="acoes(v)">
                 <BaseButton variant="ghost" size="sm" icon-left="heroicons:ellipsis-vertical" />
               </BaseDropdown>
             </td>
@@ -82,8 +80,19 @@
 <script setup lang="ts">
 import type { Vendedor } from '~/types/vendedor'
 
-defineProps<{ itens: Vendedor[]; carregando: boolean }>()
+const props = withDefaults(
+  defineProps<{ itens: Vendedor[]; carregando: boolean; podeEditar?: boolean; podeExcluir?: boolean }>(),
+  { podeEditar: true, podeExcluir: true }
+)
 const emit = defineEmits<{ editar: [id: string]; excluir: [vendedor: Vendedor] }>()
+
+function acoes(v: Vendedor) {
+  const itens: any[] = []
+  if (props.podeEditar) itens.push({ label: 'Editar', icon: 'heroicons:pencil-square', onClick: () => emit('editar', v.id) })
+  if (props.podeEditar && props.podeExcluir) itens.push({ divider: true })
+  if (props.podeExcluir) itens.push({ label: 'Excluir', icon: 'heroicons:trash', danger: true, onClick: () => emit('excluir', v) })
+  return itens
+}
 
 function formatTel(v: string | null) {
   if (!v) return ''

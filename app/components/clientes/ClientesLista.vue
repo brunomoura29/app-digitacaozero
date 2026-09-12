@@ -34,9 +34,14 @@
             class="border-b border-shift3-border/60 transition hover:bg-shift3-bg-light"
           >
             <td class="px-4 py-3" style="width: 45%">
-              <button class="text-base font-semibold text-shift3-text hover:text-shift3-teal" @click="emit('editar', c.id)">
+              <button
+                v-if="podeEditar"
+                class="text-base font-semibold text-shift3-text hover:text-shift3-teal"
+                @click="emit('editar', c.id)"
+              >
                 {{ c.nome }}
               </button>
+              <span v-else class="text-base font-semibold text-shift3-text">{{ c.nome }}</span>
             </td>
             <td class="px-4 py-3 text-sm text-shift3-text-secondary" style="width: 18%">{{ formatDoc(c.documento) || '—' }}</td>
             <td class="px-4 py-3 text-shift3-text-secondary" style="width: 20%">
@@ -59,14 +64,7 @@
               </span>
             </td>
             <td class="px-4 py-3 text-right" style="width: 3%">
-              <BaseDropdown
-                align="right"
-                :items="[
-                  { label: 'Editar', icon: 'heroicons:pencil-square', onClick: () => emit('editar', c.id) },
-                  { divider: true },
-                  { label: 'Excluir', icon: 'heroicons:trash', danger: true, onClick: () => emit('excluir', c) }
-                ]"
-              >
+              <BaseDropdown v-if="podeEditar || podeExcluir" align="right" :items="acoes(c)">
                 <BaseButton variant="ghost" size="sm" icon-left="heroicons:ellipsis-vertical" />
               </BaseDropdown>
             </td>
@@ -92,8 +90,19 @@
 <script setup lang="ts">
 import type { Cliente } from '~/types/cliente'
 
-defineProps<{ itens: Cliente[]; carregando: boolean }>()
+const props = withDefaults(
+  defineProps<{ itens: Cliente[]; carregando: boolean; podeEditar?: boolean; podeExcluir?: boolean }>(),
+  { podeEditar: true, podeExcluir: true }
+)
 const emit = defineEmits<{ editar: [id: string]; excluir: [cliente: Cliente] }>()
+
+function acoes(c: Cliente) {
+  const itens: any[] = []
+  if (props.podeEditar) itens.push({ label: 'Editar', icon: 'heroicons:pencil-square', onClick: () => emit('editar', c.id) })
+  if (props.podeEditar && props.podeExcluir) itens.push({ divider: true })
+  if (props.podeExcluir) itens.push({ label: 'Excluir', icon: 'heroicons:trash', danger: true, onClick: () => emit('excluir', c) })
+  return itens
+}
 
 function formatDoc(v: string | null) {
   if (!v) return ''

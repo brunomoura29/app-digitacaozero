@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { NivelPermissao } from '~/types/funcao'
+import type { AcaoPermissao, PermissaoModulo } from '~/types/funcao'
 
 export interface Empresa {
   id: string
@@ -21,7 +21,7 @@ export interface Perfil {
   telefone: string | null
   avatar_url: string | null
   empresas: Empresa | null
-  funcoes: { permissoes: Record<string, NivelPermissao> } | null
+  funcoes: { permissoes: Record<string, PermissaoModulo> } | null
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -40,16 +40,30 @@ export const useAuthStore = defineStore('auth', () => {
   )
   const email = computed(() => user.value?.email ?? null)
 
-  /** Nível de acesso do usuário logado num módulo (admin sempre 'editar'). */
-  function permissaoModulo(modulo: string): NivelPermissao {
-    if (!perfil.value) return 'nenhum'
-    if (perfil.value.papel === 'admin') return 'editar'
-    if (perfil.value.papel === 'vendedor') return perfil.value.funcoes?.permissoes?.[modulo] ?? 'nenhum'
-    return 'nenhum'
+  /** Checa uma ação específica (ver/incluir/editar/deletar) num módulo — admin sempre pode tudo. */
+  function temPermissao(modulo: string, acao: AcaoPermissao): boolean {
+    if (!perfil.value) return false
+    if (perfil.value.papel === 'admin') return true
+    if (perfil.value.papel === 'vendedor') return perfil.value.funcoes?.permissoes?.[modulo]?.[acao] ?? false
+    return false
   }
 
+  /** true se o usuário tem ao menos uma das 4 ações no módulo — controla menu/rota. */
   function podeAcessarModulo(modulo: string) {
-    return permissaoModulo(modulo) !== 'nenhum'
+    return (['ver', 'incluir', 'editar', 'deletar'] as AcaoPermissao[]).some((acao) => temPermissao(modulo, acao))
+  }
+
+  function podeVerModulo(modulo: string) {
+    return temPermissao(modulo, 'ver')
+  }
+  function podeIncluirModulo(modulo: string) {
+    return temPermissao(modulo, 'incluir')
+  }
+  function podeEditarModulo(modulo: string) {
+    return temPermissao(modulo, 'editar')
+  }
+  function podeExcluirModulo(modulo: string) {
+    return temPermissao(modulo, 'deletar')
   }
 
   /** Carrega o perfil + empresa do usuário logado. */
@@ -124,8 +138,12 @@ export const useAuthStore = defineStore('auth', () => {
     isCliente,
     nome,
     email,
-    permissaoModulo,
+    temPermissao,
     podeAcessarModulo,
+    podeVerModulo,
+    podeIncluirModulo,
+    podeEditarModulo,
+    podeExcluirModulo,
     carregarPerfil,
     cadastrar,
     entrar,

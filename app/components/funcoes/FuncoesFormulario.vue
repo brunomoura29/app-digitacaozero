@@ -31,31 +31,29 @@
       <section class="space-y-4">
         <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Acessos por módulo</p>
 
-        <div class="divide-y divide-shift3-border/60 rounded-medium border border-shift3-border">
-          <div
-            v-for="modulo in MODULOS_SISTEMA"
-            :key="modulo.chave"
-            class="flex items-center justify-between gap-4 px-4 py-3"
-          >
-            <span class="text-sm font-medium text-shift3-text">{{ modulo.label }}</span>
-
-            <div class="inline-flex shrink-0 rounded-pill border border-shift3-border bg-shift3-bg-light p-0.5">
-              <button
-                v-for="opcao in OPCOES_NIVEL"
-                :key="opcao.valor"
-                type="button"
-                class="rounded-pill px-3 py-1 text-xs font-medium transition"
-                :class="
-                  form.permissoes[modulo.chave] === opcao.valor
-                    ? 'bg-shift3-green/25 font-semibold text-shift3-teal'
-                    : 'text-shift3-text-secondary hover:text-shift3-text'
-                "
-                @click="form.permissoes[modulo.chave] = opcao.valor"
-              >
-                {{ opcao.label }}
-              </button>
-            </div>
-          </div>
+        <div class="overflow-x-auto rounded-medium border border-shift3-border">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-shift3-border bg-shift3-bg-light text-xs uppercase tracking-wide text-shift3-text-muted">
+                <th class="px-4 py-2 text-left font-semibold">Módulo</th>
+                <th v-for="acao in ACOES_PERMISSAO" :key="acao.chave" class="px-4 py-2 text-center font-semibold">
+                  {{ acao.label }}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-shift3-border/60">
+              <tr v-for="modulo in MODULOS_SISTEMA" :key="modulo.chave">
+                <td class="px-4 py-3 font-medium text-shift3-text">{{ modulo.label }}</td>
+                <td v-for="acao in ACOES_PERMISSAO" :key="acao.chave" class="px-4 py-3 text-center">
+                  <input
+                    v-model="form.permissoes[modulo.chave][acao.chave]"
+                    type="checkbox"
+                    class="h-4 w-4 cursor-pointer rounded border-shift3-input-border accent-shift3-green"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
@@ -84,14 +82,8 @@
 
 <script setup lang="ts">
 import { reactive } from 'vue'
-import { MODULOS_SISTEMA } from '~/types/funcao'
-import type { Funcao, FuncaoInput, NivelPermissao } from '~/types/funcao'
-
-const OPCOES_NIVEL: { valor: NivelPermissao; label: string }[] = [
-  { valor: 'nenhum', label: 'Nenhum' },
-  { valor: 'ver', label: 'Ver' },
-  { valor: 'editar', label: 'Editar' }
-]
+import { ACOES_PERMISSAO, MODULOS_SISTEMA, permissaoModuloVazia } from '~/types/funcao'
+import type { Funcao, FuncaoInput, PermissaoModulo } from '~/types/funcao'
 
 interface Props {
   modo: 'novo' | 'editar'
@@ -106,15 +98,15 @@ const emit = defineEmits<{
   cancelar: []
 }>()
 
-function permissoesIniciais(): Record<string, NivelPermissao> {
-  const base: Record<string, NivelPermissao> = {}
+function permissoesIniciais(): Record<string, PermissaoModulo> {
+  const base: Record<string, PermissaoModulo> = {}
   for (const modulo of MODULOS_SISTEMA) {
-    base[modulo.chave] = props.funcao?.permissoes?.[modulo.chave] ?? 'nenhum'
+    base[modulo.chave] = { ...permissaoModuloVazia(), ...props.funcao?.permissoes?.[modulo.chave] }
   }
   return base
 }
 
-const form = reactive<{ nome: string; descricao: string; permissoes: Record<string, NivelPermissao> }>({
+const form = reactive<{ nome: string; descricao: string; permissoes: Record<string, PermissaoModulo> }>({
   nome: props.funcao?.nome ?? '',
   descricao: props.funcao?.descricao ?? '',
   permissoes: permissoesIniciais()

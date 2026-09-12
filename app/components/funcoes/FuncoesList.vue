@@ -80,6 +80,6 @@ defineProps<{ itens: Funcao[]; carregando: boolean }>()
 const emit = defineEmits<{ editar: [id: string]; excluir: [funcao: Funcao] }>()
 
 function contarAcessos(f: Funcao) {
-  return Object.values(f.permissoes ?? {}).filter((v) => v !== 'nenhum').length
+  return Object.values(f.permissoes ?? {}).filter((p) => p.ver || p.incluir || p.editar || p.deletar).length
 }
 </script>

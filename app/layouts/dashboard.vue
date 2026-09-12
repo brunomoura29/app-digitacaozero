@@ -83,8 +83,19 @@ function verificarAcessoRota() {
     return
   }
   const rotaComModulo = MODULO_POR_PREFIXO.find(([p]) => comecaCom(path, p))
-  if (rotaComModulo && !auth.podeAcessarModulo(rotaComModulo[1])) {
+  if (!rotaComModulo) return
+  const [prefixo, modulo] = rotaComModulo
+
+  if (!auth.podeAcessarModulo(modulo)) {
     navigateTo('/')
+    return
+  }
+  // Sub-rota de escrita: /modulo/novo exige 'incluir', /modulo/:id (edição) exige 'editar' —
+  // com só 'ver' fica restrito à lista (a própria rota do prefixo).
+  if (path !== prefixo) {
+    const ehNovo = path === `${prefixo}/novo`
+    const permitido = ehNovo ? auth.podeIncluirModulo(modulo) : auth.podeEditarModulo(modulo)
+    if (!permitido) navigateTo(prefixo)
   }
 }
 
