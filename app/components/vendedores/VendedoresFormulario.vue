@@ -53,7 +53,82 @@
           />
         </div>
       </section>
+
+      <!-- ───── Acesso ao sistema ───── -->
+      <section class="space-y-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Acesso ao sistema</p>
+
+        <!-- já tem login: mostra status + troca de função + remover -->
+        <div v-if="acesso" class="space-y-4">
+          <div class="flex items-center gap-2 rounded-medium border border-shift3-border bg-shift3-bg-light px-4 py-3">
+            <Icon name="heroicons:check-circle-solid" class="h-5 w-5 text-success" />
+            <span class="text-sm text-shift3-text">Acesso ativo</span>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-shift3-text">Função</label>
+              <select
+                v-model="acessoForm.funcaoId"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+              >
+                <option :value="null">Sem função (sem acesso a módulos)</option>
+                <option v-for="f in funcoes.itens.value" :key="f.id" :value="f.id">{{ f.nome }}</option>
+              </select>
+            </div>
+            <div class="flex items-end">
+              <BaseButton type="button" variant="danger" size="sm" icon-left="heroicons:trash" @click="confirmarRemocao = true">
+                Remover acesso
+              </BaseButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- ainda não tem login: opção de criar -->
+        <div v-else class="space-y-4">
+          <BaseSwitch v-model="criarAcessoAtivo" label="Criar acesso ao sistema (login e senha)" />
+
+          <div v-if="criarAcessoAtivo" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <BaseInput
+              v-model="acessoForm.email"
+              label="E-mail de acesso *"
+              type="email"
+              placeholder="email@empresa.com"
+              icon="heroicons:envelope"
+              :error="erros.acessoEmail"
+            />
+            <BaseInput
+              v-model="acessoForm.senha"
+              label="Senha *"
+              type="password"
+              revealable
+              placeholder="Mínimo 6 caracteres"
+              icon="heroicons:lock-closed"
+              :error="erros.acessoSenha"
+            />
+            <div class="sm:col-span-2">
+              <label class="mb-1 block text-sm font-medium text-shift3-text">Função</label>
+              <select
+                v-model="acessoForm.funcaoId"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+              >
+                <option :value="null">Sem função (sem acesso a módulos)</option>
+                <option v-for="f in funcoes.itens.value" :key="f.id" :value="f.id">{{ f.nome }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
+
+    <BaseConfirmDialog
+      v-model="confirmarRemocao"
+      title="Remover acesso?"
+      message="O vendedor não vai mais conseguir entrar no sistema com este login."
+      confirm-label="Remover"
+      danger
+      @confirm="emit('remover-acesso')"
+    />
 
     <!-- ───── Ações — teleportadas pra barra fixa do layout ───── -->
     <ClientOnly>
@@ -78,23 +153,45 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
-import type { Vendedor, VendedorInput } from '~/types/vendedor'
+import { reactive, ref } from 'vue'
+import type { AcessoVendedor, Vendedor, VendedorInput } from '~/types/vendedor'
+
+/** O que fazer com o acesso ao salvar o formulário. */
+export type AcessoAcaoSubmit =
+  | { tipo: 'nenhum' }
+  | { tipo: 'criar'; email: string; senha: string; funcaoId: string | null }
+  | { tipo: 'atualizar-funcao'; funcaoId: string | null }
 
 interface Props {
   modo: 'novo' | 'editar'
   vendedor?: Vendedor
+  /** Login atual do vendedor, se já existir (undefined = ainda carregando). */
+  acesso?: AcessoVendedor | null
   salvando?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  acesso: null,
   salvando: false
 })
 
 const emit = defineEmits<{
-  submit: [dados: VendedorInput]
+  submit: [dados: VendedorInput, acesso: AcessoAcaoSubmit]
   cancelar: []
+  'remover-acesso': []
 }>()
+
+const funcoes = useFuncoes()
+onMounted(() => funcoes.carregar())
+
+const criarAcessoAtivo = ref(false)
+const confirmarRemocao = ref(false)
+
+const acessoForm = reactive<{ email: string; senha: string; funcaoId: string | null }>({
+  email: props.vendedor?.email ?? '',
+  senha: '',
+  funcaoId: props.acesso?.funcao_id ?? null
+})
 
 const form = reactive<{
   nome: string
@@ -108,7 +205,13 @@ const form = reactive<{
   ativo: props.vendedor?.ativo ?? true
 })
 
-const erros = reactive<{ nome?: string; email?: string; telefone?: string }>({})
+const erros = reactive<{
+  nome?: string
+  email?: string
+  telefone?: string
+  acessoEmail?: string
+  acessoSenha?: string
+}>({})
 
 const soDigitos = (v: string) => v.replace(/\D/g, '')
 
@@ -150,18 +253,52 @@ function validar(campo: string) {
   }
 }
 
+function validarAcesso() {
+  if (!criarAcessoAtivo.value) {
+    delete erros.acessoEmail
+    delete erros.acessoSenha
+    return
+  }
+
+  if (!acessoForm.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(acessoForm.email)) {
+    erros.acessoEmail = 'E-mail inválido'
+  } else {
+    delete erros.acessoEmail
+  }
+
+  if (!acessoForm.senha || acessoForm.senha.length < 6) {
+    erros.acessoSenha = 'Mínimo 6 caracteres'
+  } else {
+    delete erros.acessoSenha
+  }
+}
+
 function enviar() {
   validar('nome')
   validar('email')
   validar('telefone')
+  validarAcesso()
 
-  if (Object.keys(erros).length === 0) {
-    emit('submit', {
+  if (Object.keys(erros).length > 0) return
+
+  let acao: AcessoAcaoSubmit = { tipo: 'nenhum' }
+  if (props.acesso) {
+    if (acessoForm.funcaoId !== props.acesso.funcao_id) {
+      acao = { tipo: 'atualizar-funcao', funcaoId: acessoForm.funcaoId }
+    }
+  } else if (criarAcessoAtivo.value) {
+    acao = { tipo: 'criar', email: acessoForm.email.trim(), senha: acessoForm.senha, funcaoId: acessoForm.funcaoId }
+  }
+
+  emit(
+    'submit',
+    {
       nome: form.nome.trim(),
       email: form.email.trim() || null,
       telefone: form.telefone ? soDigitos(form.telefone) : null,
       ativo: form.ativo
-    })
-  }
+    },
+    acao
+  )
 }
 </script>

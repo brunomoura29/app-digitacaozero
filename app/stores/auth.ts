@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import type { NivelPermissao } from '~/types/funcao'
 
 export interface Empresa {
   id: string
@@ -13,11 +14,14 @@ export interface Perfil {
   id: string
   empresa_id: string
   nome_completo: string | null
-  papel: 'admin' | 'cliente'
+  papel: 'admin' | 'vendedor' | 'cliente'
   cliente_id: string | null
+  vendedor_id: string | null
+  funcao_id: string | null
   telefone: string | null
   avatar_url: string | null
   empresas: Empresa | null
+  funcoes: { permissoes: Record<string, NivelPermissao> } | null
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -29,15 +33,29 @@ export const useAuthStore = defineStore('auth', () => {
 
   const empresa = computed<Empresa | null>(() => perfil.value?.empresas ?? null)
   const isAdmin = computed(() => perfil.value?.papel === 'admin')
+  const isVendedor = computed(() => perfil.value?.papel === 'vendedor')
   const isCliente = computed(() => perfil.value?.papel === 'cliente')
   const nome = computed(
     () => perfil.value?.nome_completo || user.value?.email?.split('@')[0] || 'Usuário'
   )
   const email = computed(() => user.value?.email ?? null)
 
+  /** Nível de acesso do usuário logado num módulo (admin sempre 'editar'). */
+  function permissaoModulo(modulo: string): NivelPermissao {
+    if (!perfil.value) return 'nenhum'
+    if (perfil.value.papel === 'admin') return 'editar'
+    if (perfil.value.papel === 'vendedor') return perfil.value.funcoes?.permissoes?.[modulo] ?? 'nenhum'
+    return 'nenhum'
+  }
+
+  function podeAcessarModulo(modulo: string) {
+    return permissaoModulo(modulo) !== 'nenhum'
+  }
+
   /** Carrega o perfil + empresa do usuário logado. */
   async function carregarPerfil(force = false) {
-    const uid = user.value?.id
+    // useSupabaseUser() retorna o payload do JWT (getClaims()) — o id do usuário é `sub`, não `id`.
+    const uid = user.value?.sub
     if (!uid) {
       perfil.value = null
       return
@@ -47,7 +65,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data, error } = await supabase
         .from('perfis')
-        .select('id, empresa_id, nome_completo, papel, cliente_id, telefone, avatar_url')
+        .select(
+          'id, empresa_id, nome_completo, papel, cliente_id, vendedor_id, funcao_id, telefone, avatar_url, funcoes(permissoes)'
+        )
         .eq('id', uid)
         .maybeSingle()
       if (error) throw error
@@ -100,9 +120,12 @@ export const useAuthStore = defineStore('auth', () => {
     empresa,
     carregandoPerfil,
     isAdmin,
+    isVendedor,
     isCliente,
     nome,
     email,
+    permissaoModulo,
+    podeAcessarModulo,
     carregarPerfil,
     cadastrar,
     entrar,

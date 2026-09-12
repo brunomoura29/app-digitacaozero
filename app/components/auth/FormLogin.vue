@@ -74,6 +74,9 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.entrar(form.email, form.senha)
+    // `useSupabaseUser()` atualiza de forma assíncrona (listener de auth state);
+    // sem esperar, o middleware às vezes ainda vê "deslogado" e manda de volta pro /login.
+    await until(auth.user).toBeTruthy({ timeout: 3000, throwOnTimeout: false })
     toast.success('Bem-vindo de volta!')
     const destino = (route.query.redirect as string) || '/'
     await navigateTo(destino)

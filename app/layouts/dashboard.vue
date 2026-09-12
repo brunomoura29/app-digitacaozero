@@ -60,30 +60,88 @@ const backTo = computed(() => route.meta.backTo as string | undefined)
 const busca = ref('')
 
 const auth = useAuthStore()
-onMounted(() => auth.carregarPerfil())
+
+// Rotas restritas por módulo/papel — checadas aqui (não no middleware global) porque
+// dependem do perfil já carregado; fazer o middleware esperar isso causou instabilidade.
+const ROTAS_SOMENTE_ADMIN = ['/configuracoes', '/templates']
+const MODULO_POR_PREFIXO: [string, string][] = [
+  ['/clientes', 'clientes'],
+  ['/vendedores', 'vendedores'],
+  ['/produtos', 'produtos'],
+  ['/tabela-preco', 'tabela_preco'],
+  ['/pedidos', 'pedidos'],
+  ['/relatorios', 'relatorios']
+]
+function comecaCom(path: string, prefixo: string) {
+  return path === prefixo || path.startsWith(prefixo + '/')
+}
+function verificarAcessoRota() {
+  if (!auth.perfil) return
+  const path = route.path
+  if (ROTAS_SOMENTE_ADMIN.some((p) => comecaCom(path, p)) && !auth.isAdmin) {
+    navigateTo('/')
+    return
+  }
+  const rotaComModulo = MODULO_POR_PREFIXO.find(([p]) => comecaCom(path, p))
+  if (rotaComModulo && !auth.podeAcessarModulo(rotaComModulo[1])) {
+    navigateTo('/')
+  }
+}
+
+onMounted(async () => {
+  await auth.carregarPerfil()
+  verificarAcessoRota()
+})
 watch(
-  () => auth.user?.id,
-  (id) => {
-    if (id) auth.carregarPerfil(true)
-    else auth.perfil = null
+  () => auth.user?.sub,
+  async (id) => {
+    if (id) {
+      await auth.carregarPerfil(true)
+      verificarAcessoRota()
+    } else {
+      auth.perfil = null
+    }
   }
 )
+watch(() => route.path, () => verificarAcessoRota())
 
-const nav: SidebarItem[] = [
-  { label: 'Dashboard', icon: 'heroicons:squares-2x2', to: '/' },
-  { label: 'Pedidos', icon: 'heroicons:clipboard-document-list', to: '/pedidos' },
-  {
-    label: 'Cadastros',
-    icon: 'heroicons:inbox-stack',
-    children: [
-      { label: 'Clientes', icon: 'heroicons:users', to: '/clientes' },
-      { label: 'Vendedores', icon: 'heroicons:user-group', to: '/vendedores' },
-      { label: 'Produtos', icon: 'heroicons:cube', to: '/produtos' }
-    ]
-  },
-  { label: 'Tabela de preço', icon: 'heroicons:currency-dollar', to: '/tabela-preco' },
-  { label: 'Templates', icon: 'heroicons:document-duplicate', to: '/templates' },
-  { label: 'Relatórios', icon: 'heroicons:chart-bar', to: '/relatorios' },
-  { label: 'Configurações', icon: 'heroicons:cog-6-tooth', to: '/configuracoes' }
-]
+// Menu filtrado pela permissão do usuário logado (admin sempre vê tudo).
+const nav = computed<SidebarItem[]>(() => {
+  const itens: SidebarItem[] = [{ label: 'Dashboard', icon: 'heroicons:squares-2x2', to: '/' }]
+
+  if (auth.podeAcessarModulo('pedidos')) {
+    itens.push({ label: 'Pedidos', icon: 'heroicons:clipboard-document-list', to: '/pedidos' })
+  }
+
+  const cadastros = [
+    auth.podeAcessarModulo('clientes') && { label: 'Clientes', icon: 'heroicons:users', to: '/clientes' },
+    auth.podeAcessarModulo('vendedores') && { label: 'Vendedores', icon: 'heroicons:user-group', to: '/vendedores' },
+    auth.podeAcessarModulo('produtos') && { label: 'Produtos', icon: 'heroicons:cube', to: '/produtos' }
+  ].filter(Boolean) as SidebarItem['children']
+  if (cadastros && cadastros.length) {
+    itens.push({ label: 'Cadastros', icon: 'heroicons:inbox-stack', children: cadastros })
+  }
+
+  if (auth.podeAcessarModulo('tabela_preco')) {
+    itens.push({ label: 'Tabela de preço', icon: 'heroicons:currency-dollar', to: '/tabela-preco' })
+  }
+  if (auth.isAdmin) {
+    itens.push({ label: 'Templates', icon: 'heroicons:document-duplicate', to: '/templates' })
+  }
+  if (auth.podeAcessarModulo('relatorios')) {
+    itens.push({ label: 'Relatórios', icon: 'heroicons:chart-bar', to: '/relatorios' })
+  }
+  if (auth.isAdmin) {
+    itens.push({
+      label: 'Configurações',
+      icon: 'heroicons:cog-6-tooth',
+      children: [
+        { label: 'Geral', icon: 'heroicons:cog-6-tooth', to: '/configuracoes' },
+        { label: 'Funções de acesso', icon: 'heroicons:key', to: '/configuracoes/funcoes' }
+      ]
+    })
+  }
+
+  return itens
+})
 </script>

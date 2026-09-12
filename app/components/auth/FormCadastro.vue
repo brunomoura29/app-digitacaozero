@@ -126,6 +126,8 @@ async function onSubmit() {
       toast.success('Conta criada! Confirme o e-mail para acessar.', { duration: 6000 })
       await navigateTo('/login')
     } else {
+      // mesma corrida do login: espera o `useSupabaseUser()` atualizar antes de navegar
+      await until(auth.user).toBeTruthy({ timeout: 3000, throwOnTimeout: false })
       toast.success('Conta criada!')
       await navigateTo('/')
     }

@@ -23,3 +23,10 @@ export interface VendedorFiltros {
   q: string
   ativo: VendedorFiltroAtivo
 }
+
+/** Login (perfis.papel='vendedor') associado a um vendedor. */
+export interface AcessoVendedor {
+  id: string
+  funcao_id: string | null
+  criado_em: string
+}

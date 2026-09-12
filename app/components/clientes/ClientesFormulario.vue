@@ -67,10 +67,6 @@
           @update:model-value="(v) => (form.telefone = maskTel(v))"
         />
       </div>
-
-      <div class="sm:col-span-2">
-        <VendedorPicker v-model="form.vendedor_id" />
-      </div>
     </section>
 
     <!-- ───── Endereço ───── -->
@@ -82,6 +78,7 @@
     <!-- ───── Observações ───── -->
     <section class="space-y-4">
       <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Observações</p>
+      <VendedoresVendedorPicker v-model="form.vendedor_id" />
       <BaseTextarea
         v-model="form.observacoes"
         placeholder="Anotações internas sobre o cliente…"

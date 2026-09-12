@@ -3,7 +3,8 @@
  * - Não logado + rota privada  → /login
  * - Logado + página de auth      → / (dashboard)
  *
- * A raiz "/" é o dashboard (privado).
+ * A raiz "/" é o dashboard (privado). A checagem de permissão por módulo/função
+ * fica no layout `dashboard.vue` (lá o perfil já está carregado client-side).
  */
 const ROTAS_PUBLICAS = ['/login', '/cadastro', '/recuperar-senha', '/redefinir-senha', '/design']
 const APENAS_DESLOGADO = ['/login', '/cadastro', '/recuperar-senha']
