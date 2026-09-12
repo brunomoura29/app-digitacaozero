@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@nuxt/fonts": "^0.14.0",
     "@nuxt/icon": "^2.5.1",
     "@nuxtjs/supabase": "^2.0.10",

@@ -1,12 +1,11 @@
 <template>
   <div>
-    <label v-if="!hideLabel" class="block text-sm font-medium text-shift3-text mb-2">Produto</label>
+    <label class="block text-sm font-medium text-shift3-text mb-2">Cliente</label>
     <div class="relative">
       <BaseInput
         :model-value="textoBusca"
         type="text"
-        placeholder="Buscar produto por descrição ou SKU…"
-        icon="heroicons:magnifying-glass"
+        placeholder="Buscar cliente..."
         @update:model-value="atualizarBusca"
         @focus="mostrarLista = true"
         @blur="fecharLista"
@@ -17,8 +16,8 @@
         v-if="mostrarLista && (filtrados.length > 0 || textoBusca)"
         class="absolute top-full left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-shift3-bg-card border border-shift3-border rounded-lg shadow-lg z-10"
       >
-        <div v-if="produtos.carregando.value" class="p-3 text-sm text-shift3-text-muted">
-          Carregando produtos…
+        <div v-if="clientes.carregando.value" class="p-3 text-sm text-shift3-text-muted">
+          Carregando clientes…
         </div>
 
         <button
@@ -26,28 +25,26 @@
           type="button"
           class="w-full px-3 py-2 text-sm text-shift3-text-muted hover:bg-shift3-bg-light"
         >
-          Nenhum produto encontrado
+          Nenhum cliente encontrado
         </button>
 
         <button
-          v-for="p in filtrados"
+          v-for="c in filtrados"
           v-else
-          :key="p.id"
+          :key="c.id"
           type="button"
           class="w-full px-3 py-2 text-left text-sm hover:bg-shift3-bg-light transition flex items-center justify-between"
-          :class="{ 'bg-shift3-teal/10': modelValue === p.id }"
-          @click="selecionar(p)"
+          :class="{ 'bg-shift3-teal/10': modelValue === c.id }"
+          @click="selecionar(c)"
         >
-          <span class="min-w-0">
-            <span class="block truncate" :class="{ 'font-semibold text-shift3-teal': modelValue === p.id }">
-              {{ p.descricao }}
-            </span>
-            <span v-if="p.sku" class="block text-xs text-shift3-text-muted">SKU: {{ p.sku }}</span>
+          <span :class="{ 'font-semibold text-shift3-teal': modelValue === c.id }">
+            {{ c.nome }}
           </span>
-          <Icon v-if="modelValue === p.id" name="heroicons:check" class="w-4 h-4 shrink-0 text-shift3-teal" />
+          <Icon v-if="modelValue === c.id" name="heroicons:check" class="w-4 h-4 text-shift3-teal" />
         </button>
 
         <button
+          v-if="modelValue"
           type="button"
           class="w-full px-3 py-2 text-sm text-shift3-text-muted hover:bg-shift3-bg-light border-t border-shift3-border/60"
           @click="limpar"
@@ -61,46 +58,41 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import type { Cliente } from '~/types/cliente'
 
 interface Props {
   modelValue?: string | null
-  /** Esconde o rótulo "Produto" — útil quando já usado dentro de uma coluna de tabela. */
-  hideLabel?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  modelValue: null,
-  hideLabel: false
+  modelValue: null
 })
 
 const emit = defineEmits<{
   'update:modelValue': [id: string | null]
 }>()
 
-const produtos = useProdutos()
+const clientes = useClientes()
 const textoBusca = ref('')
 const mostrarLista = ref(false)
 
 onMounted(() => {
-  produtos.carregar()
+  clientes.carregar()
 })
 
-// pré-preenche o texto de busca quando já vem um produto selecionado (edição) —
-// inclusive se a lista carregar depois do valor já estar setado.
 function sincronizarTexto() {
   if (!props.modelValue) return
-  const p = produtos.itens.value.find((i) => i.id === props.modelValue)
-  if (p) textoBusca.value = p.descricao
+  const c = clientes.itens.value.find((i) => i.id === props.modelValue)
+  if (c) textoBusca.value = c.nome
 }
 watch(() => props.modelValue, sincronizarTexto, { immediate: true })
-watch(() => produtos.itens.value, sincronizarTexto)
+watch(() => clientes.itens.value, sincronizarTexto)
 
 const filtrados = computed(() => {
-  const termo = textoBusca.value.trim().toLowerCase()
-  if (!termo) return produtos.itens.value
-  return produtos.itens.value.filter(
-    (p) => p.descricao.toLowerCase().includes(termo) || (p.sku ?? '').toLowerCase().includes(termo)
-  )
+  if (!textoBusca.value.trim()) return clientes.itens.value.filter((c) => c.ativo)
+
+  const termo = textoBusca.value.toLowerCase()
+  return clientes.itens.value.filter((c) => c.ativo && c.nome.toLowerCase().includes(termo))
 })
 
 function atualizarBusca(valor: string) {
@@ -108,9 +100,9 @@ function atualizarBusca(valor: string) {
   mostrarLista.value = true
 }
 
-function selecionar(p: { id: string; descricao: string }) {
-  emit('update:modelValue', p.id)
-  textoBusca.value = p.descricao
+function selecionar(c: Cliente) {
+  emit('update:modelValue', c.id)
+  textoBusca.value = c.nome
   mostrarLista.value = false
 }
 
