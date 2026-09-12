@@ -85,6 +85,16 @@ Módulo `@nuxt/icon` com `@iconify-json/heroicons` bundlado (funciona offline).
 
 ## 5. Componentes base (auto-importados de `app/components/`)
 
+`components/` é organizado por módulo em subpastas — os nomes **não** mudam
+(dedup do Nuxt): `base/BaseButton.vue` → `<BaseButton>`, `app/AppSidebar.vue` →
+`<AppSidebar>`, `clientes/ClientesLista.vue` → `<ClientesLista>`.
+Exceção: `auth/FormLogin.vue` → `<AuthFormLogin>` (o prefixo `Auth` é adicionado).
+
+Além dos abaixo: `BaseTextarea` (mesma API do BaseInput, + `rows`), `BaseSwitch`
+(`v-model` boolean, `label`), `BasePageHeader` (`title`/`subtitle` + slot `#actions`),
+`BaseEmptyState` (`title`/`description`/`icon` + slot), `BaseConfirmDialog`
+(`v-model` aberto, `title`/`message`/`danger`/`loading`, emite `confirm`/`cancel`).
+
 ### BaseButton
 ```vue
 <BaseButton variant="primary" size="md" :loading="false" icon-left="heroicons:paper-airplane">

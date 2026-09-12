@@ -116,7 +116,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { DropdownItem } from '~/components/BaseDropdown.vue'
+import type { DropdownItem } from '~/components/base/BaseDropdown.vue'
 import type { UploadFile } from '~/composables/useUpload'
 
 const toast = useToast()

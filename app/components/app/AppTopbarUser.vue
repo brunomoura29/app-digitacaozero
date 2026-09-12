@@ -14,7 +14,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAuthStore } from '~/stores/auth'
-import type { DropdownItem } from '~/components/BaseDropdown.vue'
+import type { DropdownItem } from '~/components/base/BaseDropdown.vue'
 
 const auth = useAuthStore()
 

@@ -1,5 +1,5 @@
 <template>
-  <FormLogin />
+  <AuthFormLogin />
 </template>
 
 <script setup lang="ts">

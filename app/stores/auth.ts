@@ -47,7 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const { data, error } = await supabase
         .from('perfis')
-        .select('id, empresa_id, nome_completo, papel, cliente_id, telefone, avatar_url, empresas(id, nome, email, telefone, moeda)')
+        .select('id, empresa_id, nome_completo, papel, cliente_id, telefone, avatar_url')
         .eq('id', uid)
         .maybeSingle()
       if (error) throw error

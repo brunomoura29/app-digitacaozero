@@ -1,5 +1,5 @@
 <template>
-  <FormCadastro />
+  <AuthFormCadastro />
 </template>
 
 <script setup lang="ts">

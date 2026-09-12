@@ -1,5 +1,5 @@
 <template>
-  <FormRecup />
+  <AuthFormRecup />
 </template>
 
 <script setup lang="ts">

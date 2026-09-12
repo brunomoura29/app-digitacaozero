@@ -215,11 +215,9 @@ export const useClientes = defineStore('clientes', () => {
 })
 ```
 
-**Stores:** `auth`, `clientes`, `produtos`, `tabelasPreco`, `pedidos`
-(rascunho + itens + totais computados + `montarDeExtracao/gerarPdf/enviarWhatsapp`), `ui`
-(sidebar collapsed — migra o cookie pra cá).
-
-Custo de performance: só o proxy reativo do Vue — irrelevante.
+**Pinia só para `auth`** (sessão global). As **entidades** (clientes, produtos, vendedores,
+tabelas de preço, pedidos) são **composables** `use<Entidade>()` com estado compartilhado via
+`useState` + tipos em `types/<entidade>.ts`. Mesmo efeito de store, sem a dependência extra.
 
 ---
 
@@ -305,10 +303,16 @@ Sem `/pedidos/novo`, Clientes, Tabela de preço, Templates, Configurações.
 - [ ] **Config Supabase Dashboard:** "Confirm email" está **ON** → após cadastro o usuário precisa confirmar o e-mail antes de logar. Desligar em Auth → Email se quiser testar sem isso.
 
 ### Fase 1 — Cadastros (~1 semana)
-- [ ] Migration `002_cadastros`: `vendedores`, `clientes`, `produtos`, `tabelas_preco`, `tabelas_preco_itens`, `empresa_sequencias`, RLS + índices
-- [ ] `DataTable`, `PageHeader`, `ConfirmDialog`, `EmptyState`
-- [ ] `stores/vendedores|clientes|produtos|tabelasPreco` + rotas `server/api/vendedores|clientes|produtos|tabelas-preco/*`
-- [ ] Telas `/clientes*`, `/produtos*`, `/tabela-preco*`, `/configuracoes/vendedores` (form + validação zod)
+> **Padrão dos cadastros:** cada entidade = `composables/use<Entidade>.ts` (estado compartilhado
+> via `useState`, CRUD chamando o Supabase direto + RLS) + `types/<entidade>.ts`. **Não** usar
+> Pinia para entidades (Pinia fica só para `auth`). Sem `server/api` nesta fase.
+> `components/` organizado por módulo: `base/`, `app/`, `auth/`, `clientes/`, …
+
+- [x] **Clientes:** migration `002_clientes` (tabela + RLS admin/cliente + índices + FK `perfis.cliente_id`); `composables/useClientes.ts` + `types/cliente.ts`; base `BaseTextarea`, `BaseSwitch`, `BasePageHeader`, `BaseEmptyState`, `BaseConfirmDialog`; módulo `components/clientes/*` (Filtros, Lista, Formulário com seções, EnderecoCampos); telas `/clientes`, `/clientes/novo`, `/clientes/[id]`
+- [ ] **Vendedores:** migration + `composables/useVendedores` + `types/vendedor` + `/configuracoes/vendedores` (+ FK `clientes.vendedor_id` + campo no formulário de cliente)
+- [ ] **Produtos:** migration + `useProdutos` + `types/produto` + telas (`sku, codigo_barras, descricao, fabricante, modelo, numero_serie, unidade, ncm, ativo`)
+- [ ] **Tabela de preço:** migration (`tabelas_preco` + itens + `empresa_sequencias`) + `useTabelasPreco` + telas `/tabela-preco`, `/tabela-preco/[id]` (editor de itens, `ProductPicker`)
+- [ ] `DataTable` genérico (extrair de `ClientesLista` quando Produtos precisar)
 - [ ] Seed de exemplo
 
 ### Fase 2 — Extração real (~1,5 semana)
