@@ -159,7 +159,10 @@ async function extrair() {
     for (const campo of modeloAtual.value?.schema.campos ?? []) {
       camposCabecalho[campo.id] = resposta.dadosExtraidos.campos?.[campo.id] ?? ''
     }
-    itensPedido.value = mapearItensExtraidos(resposta.dadosExtraidos.itens ?? [])
+    itensPedido.value = mapearItensExtraidos(
+      resposta.dadosExtraidos.itens ?? [],
+      modeloAtual.value?.schema.campos_item ?? []
+    )
 
     if (resposta.reaproveitado) toast.info('Esse arquivo já tinha sido extraído antes — reaproveitando o resultado.')
     etapa.value = 'revisao'

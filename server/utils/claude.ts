@@ -105,7 +105,11 @@ export async function extrairDocumento(opts: {
         'Você extrai dados estruturados de documentos de pedido de compra (foto ou PDF). ' +
         'Extraia SOMENTE os campos definidos no schema — nunca invente valores que não estão ' +
         'no documento; deixe o campo vazio/null quando não encontrar. Em "itens", extraia uma ' +
-        'entrada por linha de produto do documento.' +
+        'entrada por linha de produto do documento. ' +
+        'Números e valores monetários no documento seguem o formato brasileiro: "." separa ' +
+        'milhar e "," separa decimal. Ao converter para os campos numéricos do schema, use o ' +
+        'valor numérico correto (ex: "R$ 23,00" vira 23; "1.234,56" vira 1234.56) — nunca trate ' +
+        'a vírgula decimal como separador de milhar.' +
         dicasTexto,
       messages: [
         {

@@ -1,3 +1,5 @@
+import type { CampoSchema } from '~/types/modelo'
+
 export type StatusPedido = 'rascunho' | 'aprovado' | 'enviado' | 'cancelado'
 export type StatusMatchItem = 'correspondido' | 'nao_correspondido' | 'manual'
 
@@ -87,9 +89,23 @@ function encontrarCampo(item: Record<string, unknown>, papeis: string[]): unknow
  * template) nas colunas fixas de `pedidos_itens`, tentando casar por nome do campo.
  * O que não bate fica vazio — a tabela editável é a rede de segurança pro usuário
  * completar/corrigir antes de salvar.
+ *
+ * A extração devolve cada item com chaves = `campo.id` (o JSON schema é montado por id,
+ * não por nome — ver `montarJsonSchema`), então precisamos traduzir id → nome antes de
+ * tentar casar pelos sinônimos, senão a busca compara sinônimos contra UUIDs e nunca bate.
  */
-export function mapearItensExtraidos(itensExtraidos: Record<string, unknown>[]): PedidoItemInput[] {
-  return itensExtraidos.map((item) => {
+export function mapearItensExtraidos(
+  itensExtraidos: Record<string, unknown>[],
+  camposItem: CampoSchema[]
+): PedidoItemInput[] {
+  const nomePorId = new Map(camposItem.map((c) => [c.id, c.nome]))
+
+  return itensExtraidos.map((itemBruto) => {
+    const item: Record<string, unknown> = {}
+    for (const [chave, valor] of Object.entries(itemBruto)) {
+      item[nomePorId.get(chave) ?? chave] = valor
+    }
+
     const sku = encontrarCampo(item, SINONIMOS.sku)
     const descricao = encontrarCampo(item, SINONIMOS.descricao)
     const quantidade = encontrarCampo(item, SINONIMOS.quantidade)
