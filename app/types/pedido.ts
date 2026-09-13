@@ -1,6 +1,6 @@
 import type { CampoSchema } from '~/types/modelo'
 
-export type StatusPedido = 'rascunho' | 'aprovado' | 'enviado' | 'cancelado'
+export type StatusPedido = 'rascunho' | 'em_validacao' | 'em_aprovacao' | 'aprovado' | 'rejeitado' | 'enviado' | 'cancelado'
 export type StatusMatchItem = 'correspondido' | 'nao_correspondido' | 'manual'
 
 export interface PedidoItem {

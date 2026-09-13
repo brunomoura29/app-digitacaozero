@@ -12,62 +12,27 @@
       <PedidosFiltros :filtros="filtros" @filtrar="carregar" />
     </div>
 
-    <PedidosList
-      :itens="itens"
-      :carregando="carregando"
-      :pode-excluir="auth.podeExcluirModulo('pedidos')"
-      @ver="(id) => navigateTo(`/pedidos/${id}`)"
-      @excluir="pedirExclusao"
+    <div v-if="carregando" class="flex justify-center py-12">
+      <div class="animate-spin">
+        <BaseIcon icon="heroicons:arrow-path" class="w-6 h-6" />
+      </div>
+    </div>
+
+    <PedidosKanban
+      v-else
+      :pedidos="itens"
     />
 
-    <BaseConfirmDialog
-      v-model="dialog.aberto"
-      danger
-      title="Excluir pedido"
-      :message="`Excluir o pedido '${dialog.pedido?.numero}'? Esta ação não pode ser desfeita.`"
-      confirm-label="Excluir"
-      :loading="dialog.excluindo"
-      @confirm="confirmarExclusao"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
-import type { Pedido } from '~/types/pedido'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({ layout: 'dashboard', title: 'Pedidos' })
 
-const { itens, carregando, filtros, carregar, remover } = usePedidos()
+const { itens, carregando, filtros, carregar } = usePedidos()
 const auth = useAuthStore()
-const toast = useToast()
 
 onMounted(() => carregar())
-
-const dialog = reactive<{ aberto: boolean; pedido: Pedido | null; excluindo: boolean }>({
-  aberto: false,
-  pedido: null,
-  excluindo: false
-})
-
-function pedirExclusao(pedido: Pedido) {
-  dialog.pedido = pedido
-  dialog.aberto = true
-}
-
-async function confirmarExclusao() {
-  if (!dialog.pedido) return
-  dialog.excluindo = true
-  try {
-    await remover(dialog.pedido.id)
-    toast.success('Pedido excluído')
-    dialog.aberto = false
-    dialog.pedido = null
-  } catch {
-    toast.error('Não foi possível excluir o pedido')
-  } finally {
-    dialog.excluindo = false
-  }
-}
 </script>
