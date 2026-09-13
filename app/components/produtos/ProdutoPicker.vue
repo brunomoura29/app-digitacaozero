@@ -1,64 +1,61 @@
 <template>
   <div>
     <label v-if="!hideLabel" class="block text-sm font-medium text-shift3-text mb-2">Produto</label>
-    <div>
-      <div ref="inputRef">
-        <BaseInput
-          :model-value="textoBusca"
-          type="text"
-          placeholder="Buscar produto por descrição ou SKU…"
-          icon="heroicons:magnifying-glass"
-          @update:model-value="atualizarBusca"
-          @focus="mostrarLista = true"
-          @blur="fecharLista"
-        />
+    <div ref="inputRef">
+      <BaseInput
+        :model-value="textoBusca"
+        type="text"
+        placeholder="Buscar produto por descrição ou SKU…"
+        icon="heroicons:magnifying-glass"
+        @update:model-value="atualizarBusca"
+        @focus="mostrarLista = true"
+        @blur="fecharLista"
+      />
+    </div>
+
+    <!-- Dropdown de resultados -->
+    <div
+      v-if="mostrarLista && (filtrados.length > 0 || textoBusca)"
+      class="fixed max-h-64 overflow-y-auto bg-shift3-bg-card border border-shift3-border rounded-lg shadow-lg z-50"
+      :style="dropdownStyle"
+    >
+      <div v-if="produtos.carregando.value" class="p-3 text-sm text-shift3-text-muted">
+        Carregando produtos…
       </div>
 
-      <!-- Dropdown de resultados -->
-      <div
-        v-if="mostrarLista && (filtrados.length > 0 || textoBusca)"
-        class="fixed max-h-64 overflow-y-auto bg-shift3-bg-card border border-shift3-border rounded-lg shadow-lg z-50"
-        :style="dropdownStyle"
+      <button
+        v-else-if="filtrados.length === 0"
+        type="button"
+        class="w-full px-3 py-2 text-sm text-shift3-text-muted hover:bg-shift3-bg-light"
       >
-        <div v-if="produtos.carregando.value" class="p-3 text-sm text-shift3-text-muted">
-          Carregando produtos…
-        </div>
+        Nenhum produto encontrado
+      </button>
 
-        <button
-          v-else-if="filtrados.length === 0"
-          type="button"
-          class="w-full px-3 py-2 text-sm text-shift3-text-muted hover:bg-shift3-bg-light"
-        >
-          Nenhum produto encontrado
-        </button>
-
-        <button
-          v-for="p in filtrados"
-          v-else
-          :key="p.id"
-          type="button"
-          class="w-full px-3 py-2 text-left text-sm hover:bg-shift3-bg-light transition flex items-center justify-between"
-          :class="{ 'bg-shift3-teal/10': modelValue === p.id }"
-          @click="selecionar(p)"
-        >
-          <span class="min-w-0">
-            <span class="block truncate" :class="{ 'font-semibold text-shift3-teal': modelValue === p.id }">
-              {{ p.descricao }}
-            </span>
-            <span v-if="p.sku" class="block text-xs text-shift3-text-muted">SKU: {{ p.sku }}</span>
+      <button
+        v-for="p in filtrados"
+        v-else
+        :key="p.id"
+        type="button"
+        class="w-full px-3 py-2 text-left text-sm hover:bg-shift3-bg-light transition flex items-center justify-between"
+        :class="{ 'bg-shift3-teal/10': modelValue === p.id }"
+        @click="selecionar(p)"
+      >
+        <span class="min-w-0">
+          <span class="block truncate" :class="{ 'font-semibold text-shift3-teal': modelValue === p.id }">
+            {{ p.descricao }}
           </span>
-          <Icon v-if="modelValue === p.id" name="heroicons:check" class="w-4 h-4 shrink-0 text-shift3-teal" />
-        </button>
+          <span v-if="p.sku" class="block text-xs text-shift3-text-muted">SKU: {{ p.sku }}</span>
+        </span>
+        <Icon v-if="modelValue === p.id" name="heroicons:check" class="w-4 h-4 shrink-0 text-shift3-teal" />
+      </button>
 
-        <button
-          type="button"
-          class="w-full px-3 py-2 text-sm text-shift3-text-muted hover:bg-shift3-bg-light border-t border-shift3-border/60"
-          @click="limpar"
-        >
-          Limpar seleção
-        </button>
-      </div>
-      </div>
+      <button
+        type="button"
+        class="w-full px-3 py-2 text-sm text-shift3-text-muted hover:bg-shift3-bg-light border-t border-shift3-border/60"
+        @click="limpar"
+      >
+        Limpar seleção
+      </button>
     </div>
   </div>
 </template>
