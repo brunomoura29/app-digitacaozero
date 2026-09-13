@@ -1,7 +1,8 @@
 <template>
   <div class="space-y-3">
-    <div class="overflow-x-auto rounded-medium border border-shift3-border">
-      <table class="min-w-full text-sm">
+    <div class="rounded-medium border border-shift3-border">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
         <thead>
           <tr class="border-b border-shift3-border bg-shift3-bg-light text-left text-xs uppercase tracking-wide text-shift3-text-muted">
             <th class="px-3 py-2 font-semibold" style="width: 26%">Produto</th>
@@ -80,6 +81,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <div class="flex items-center justify-between">
