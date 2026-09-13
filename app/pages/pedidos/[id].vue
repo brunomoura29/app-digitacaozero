@@ -8,94 +8,141 @@
       <BaseButton to="/pedidos" variant="secondary" size="sm">Voltar para a lista</BaseButton>
     </BaseEmptyState>
 
-    <div v-else class="space-y-8">
+    <div v-else class="space-y-6">
+      <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-lg font-semibold text-shift3-text">{{ pedido.numero }}</p>
+          <p class="text-lg font-semibold text-shift3-text">{{ pedido.numero || 'Novo pedido' }}</p>
           <p class="text-sm text-shift3-text-secondary">{{ pedido.clientes?.nome }}</p>
         </div>
-        <span
-          class="inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium"
-          :class="CORES[pedido.status]"
-        >
+        <span class="inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium" :class="CORES[pedido.status]">
           <span class="h-1.5 w-1.5 rounded-full" :class="BOLINHAS[pedido.status]" />
           {{ LABELS[pedido.status] }}
         </span>
       </div>
 
-      <section class="grid grid-cols-1 gap-4 rounded-medium border border-shift3-border p-4 sm:grid-cols-3">
+      <!-- Informações básicas -->
+      <section class="grid grid-cols-1 gap-4 rounded-medium border border-shift3-border p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Emissão</p>
-          <p class="text-sm text-shift3-text">{{ formatData(pedido.data_emissao) }}</p>
+          <label class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Emissão</label>
+          <p class="mt-1 text-sm text-shift3-text">{{ formatData(pedido.data_emissao) }}</p>
         </div>
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Condição de pagamento</p>
-          <p class="text-sm text-shift3-text">{{ pedido.condicao_pagamento || '—' }}</p>
-        </div>
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Prazo de entrega</p>
-          <p class="text-sm text-shift3-text">{{ pedido.prazo_entrega || '—' }}</p>
-        </div>
+        <BaseInput v-model="form.condicao_pagamento" label="Condição de Pagamento" placeholder="à vista, 30 dias..." :disabled="!podeEditar" />
+        <BaseInput v-model="form.prazo_entrega" label="Prazo de Entrega" placeholder="data ou dias" :disabled="!podeEditar" />
+        <div />
       </section>
 
+      <!-- Itens (editável) -->
       <section class="space-y-4">
         <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
           <Icon name="heroicons:table-cells" class="h-5 w-5 text-shift3-teal" />
           <p class="text-base font-semibold text-shift3-text">Itens</p>
         </div>
+        <PedidosItensEditor v-model="form.itens" :disabled="!podeEditar" />
+      </section>
 
-        <div class="overflow-x-auto rounded-medium border border-shift3-border">
-          <table class="min-w-full text-sm">
-            <thead>
-              <tr class="border-b border-shift3-border bg-shift3-bg-light text-left text-xs uppercase tracking-wide text-shift3-text-muted">
-                <th class="px-3 py-2 font-semibold">Descrição</th>
-                <th class="px-3 py-2 font-semibold">SKU</th>
-                <th class="px-3 py-2 font-semibold text-right">Qtd.</th>
-                <th class="px-3 py-2 font-semibold text-right">Preço Unit.</th>
-                <th class="px-3 py-2 font-semibold text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-shift3-border/60">
-              <tr v-for="item in itens" :key="item.id">
-                <td class="px-3 py-2 text-shift3-text">{{ item.descricao || '—' }}</td>
-                <td class="px-3 py-2 text-shift3-text-secondary">{{ item.sku || '—' }}</td>
-                <td class="px-3 py-2 text-right text-shift3-text-secondary">{{ item.quantidade }}</td>
-                <td class="px-3 py-2 text-right text-shift3-text-secondary">{{ formatValor(item.preco_unitario) }}</td>
-                <td class="px-3 py-2 text-right font-medium text-shift3-text">{{ formatValor(item.total_linha) }}</td>
-              </tr>
-            </tbody>
-          </table>
+      <!-- Totais -->
+      <section class="rounded-medium border border-shift3-border bg-shift3-bg-light p-4">
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Desconto</label>
+            <BaseInput v-model.number="form.desconto_valor" type="number" step="0.01" :disabled="!podeEditar" class="mt-1" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Frete</label>
+            <BaseInput v-model.number="form.frete_valor" type="number" step="0.01" :disabled="!podeEditar" class="mt-1" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Observações</label>
+            <BaseTextarea v-model="form.observacoes" :disabled="!podeEditar" class="mt-1" />
+          </div>
         </div>
 
-        <div class="flex justify-end">
-          <p class="text-sm text-shift3-text-secondary">
-            Total: <span class="text-base font-semibold text-shift3-text">{{ formatValor(pedido.total) }}</span>
-          </p>
+        <!-- Resumo de totais -->
+        <div class="mt-4 space-y-2 border-t border-shift3-border pt-4">
+          <div class="flex justify-between text-sm">
+            <span class="text-shift3-text-secondary">Subtotal:</span>
+            <span class="text-shift3-text">{{ formatValor(subtotal) }}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-shift3-text-secondary">Frete:</span>
+            <span class="text-shift3-text">+ {{ formatValor(form.frete_valor) }}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-shift3-text-secondary">Desconto:</span>
+            <span class="text-shift3-text">- {{ formatValor(form.desconto_valor) }}</span>
+          </div>
+          <div class="flex justify-between border-t border-shift3-border pt-2 text-base font-semibold">
+            <span class="text-shift3-text">Total:</span>
+            <span class="text-shift3-text">{{ formatValor(total) }}</span>
+          </div>
         </div>
       </section>
+
+      <!-- Botões de ação -->
+      <div class="flex flex-wrap gap-2 border-t border-shift3-border pt-4">
+        <BaseButton v-if="podeEditar" @click="salvar" variant="primary" :loading="salvando">
+          Salvar
+        </BaseButton>
+        <BaseButton
+          v-if="pedido.status === 'rascunho' && podeValidar"
+          @click="validar"
+          variant="primary"
+          :loading="salvando"
+        >
+          Validar
+        </BaseButton>
+        <BaseButton v-if="podeEditar" to="/pedidos" variant="secondary">
+          Voltar
+        </BaseButton>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import type { Pedido, PedidoItem, StatusPedido } from '~/types/pedido'
+import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({ layout: 'dashboard', title: 'Pedido', backTo: '/pedidos' })
 
 const route = useRoute()
-const { porId, buscarUm, buscarItens } = usePedidos()
+const { porId, buscarUm, buscarItens, atualizar } = usePedidos()
+const auth = useAuthStore()
 const toast = useToast()
 
 const id = route.params.id as string
 const pedido = ref<Pedido | null>()
-const itens = ref<PedidoItem[]>([])
 const pending = ref(true)
+const salvando = ref(false)
+
+const form = reactive({
+  condicao_pagamento: '',
+  prazo_entrega: '',
+  desconto_valor: 0,
+  frete_valor: 0,
+  observacoes: '',
+  itens: [] as PedidoItem[]
+})
+
+const podeEditar = computed(() => ['rascunho', 'rejeitado'].includes(pedido.value?.status ?? ''))
+const podeValidar = computed(() => pedido.value?.status === 'rascunho' && auth.isAdmin)
+
+const subtotal = computed(() => form.itens.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0))
+const total = computed(() => subtotal.value + form.frete_valor - form.desconto_valor)
 
 onMounted(async () => {
   try {
     pedido.value = porId(id) ?? (await buscarUm(id))
-    if (pedido.value) itens.value = await buscarItens(id)
+    if (pedido.value) {
+      form.itens = await buscarItens(id)
+      form.condicao_pagamento = pedido.value.condicao_pagamento || ''
+      form.prazo_entrega = pedido.value.prazo_entrega || ''
+      form.desconto_valor = pedido.value.desconto_valor || 0
+      form.frete_valor = pedido.value.frete_valor || 0
+      form.observacoes = pedido.value.observacoes || ''
+    }
   } catch {
     toast.error('Não foi possível carregar o pedido')
   } finally {
@@ -103,21 +150,78 @@ onMounted(async () => {
   }
 })
 
+async function salvar() {
+  if (!pedido.value) return
+  salvando.value = true
+  try {
+    await atualizar(pedido.value.id, {
+      condicao_pagamento: form.condicao_pagamento,
+      prazo_entrega: form.prazo_entrega,
+      desconto_valor: form.desconto_valor,
+      frete_valor: form.frete_valor,
+      observacoes: form.observacoes,
+      subtotal: subtotal.value,
+      total: total.value
+    })
+    toast.success('Pedido salvo com sucesso')
+  } catch (err) {
+    toast.error('Não foi possível salvar o pedido')
+  } finally {
+    salvando.value = false
+  }
+}
+
+async function validar() {
+  if (!pedido.value || form.itens.length === 0) {
+    toast.error('Pedido precisa ter pelo menos 1 item')
+    return
+  }
+  salvando.value = true
+  try {
+    await atualizar(pedido.value.id, {
+      status: 'em_validacao',
+      condicao_pagamento: form.condicao_pagamento,
+      prazo_entrega: form.prazo_entrega,
+      desconto_valor: form.desconto_valor,
+      frete_valor: form.frete_valor,
+      observacoes: form.observacoes,
+      subtotal: subtotal.value,
+      total: total.value
+    })
+    pedido.value.status = 'em_validacao'
+    toast.success('Pedido validado e enviado para aprovação')
+    navigateTo('/pedidos')
+  } catch (err) {
+    toast.error('Não foi possível validar o pedido')
+  } finally {
+    salvando.value = false
+  }
+}
+
 const LABELS: Record<StatusPedido, string> = {
   rascunho: 'Rascunho',
+  em_validacao: 'Em Validação',
+  em_aprovacao: 'Em Aprovação',
   aprovado: 'Aprovado',
+  rejeitado: 'Rejeitado',
   enviado: 'Enviado',
   cancelado: 'Cancelado'
 }
 const CORES: Record<StatusPedido, string> = {
   rascunho: 'bg-shift3-border/60 text-shift3-text-muted',
+  em_validacao: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200',
+  em_aprovacao: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200',
   aprovado: 'bg-success/15 text-success',
+  rejeitado: 'bg-danger/15 text-danger',
   enviado: 'bg-shift3-green/20 text-shift3-teal',
   cancelado: 'bg-danger/15 text-danger'
 }
 const BOLINHAS: Record<StatusPedido, string> = {
   rascunho: 'bg-shift3-text-muted',
+  em_validacao: 'bg-blue-500',
+  em_aprovacao: 'bg-yellow-500',
   aprovado: 'bg-success',
+  rejeitado: 'bg-danger',
   enviado: 'bg-shift3-teal',
   cancelado: 'bg-danger'
 }

@@ -62,11 +62,20 @@ export function usePedidos() {
     return data as string
   }
 
+  async function atualizar(id: string, dados: Partial<Pedido>): Promise<void> {
+    const { error } = await supabase.from('pedidos').update(dados).eq('id', id)
+    if (error) throw error
+    const idx = itens.value.findIndex((p) => p.id === id)
+    if (idx >= 0) {
+      itens.value[idx] = { ...itens.value[idx], ...dados }
+    }
+  }
+
   async function remover(id: string): Promise<void> {
     const { error } = await supabase.from('pedidos').delete().eq('id', id)
     if (error) throw error
     itens.value = itens.value.filter((p) => p.id !== id)
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, buscarItens, criar, remover }
+  return { itens, carregando, filtros, carregar, porId, buscarUm, buscarItens, criar, atualizar, remover }
 }
