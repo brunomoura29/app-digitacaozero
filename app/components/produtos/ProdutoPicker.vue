@@ -1,21 +1,24 @@
 <template>
   <div>
     <label v-if="!hideLabel" class="block text-sm font-medium text-shift3-text mb-2">Produto</label>
-    <div class="relative">
-      <BaseInput
-        :model-value="textoBusca"
-        type="text"
-        placeholder="Buscar produto por descrição ou SKU…"
-        icon="heroicons:magnifying-glass"
-        @update:model-value="atualizarBusca"
-        @focus="mostrarLista = true"
-        @blur="fecharLista"
-      />
+    <div>
+      <div ref="inputRef">
+        <BaseInput
+          :model-value="textoBusca"
+          type="text"
+          placeholder="Buscar produto por descrição ou SKU…"
+          icon="heroicons:magnifying-glass"
+          @update:model-value="atualizarBusca"
+          @focus="mostrarLista = true"
+          @blur="fecharLista"
+        />
+      </div>
 
       <!-- Dropdown de resultados -->
       <div
         v-if="mostrarLista && (filtrados.length > 0 || textoBusca)"
-        class="absolute top-full left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-shift3-bg-card border border-shift3-border rounded-lg shadow-lg z-10"
+        class="fixed max-h-64 overflow-y-auto bg-shift3-bg-card border border-shift3-border rounded-lg shadow-lg z-50"
+        :style="dropdownStyle"
       >
         <div v-if="produtos.carregando.value" class="p-3 text-sm text-shift3-text-muted">
           Carregando produtos…
@@ -55,12 +58,13 @@
           Limpar seleção
         </button>
       </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 
 interface Props {
   modelValue?: string | null
@@ -80,9 +84,23 @@ const emit = defineEmits<{
 const produtos = useProdutos()
 const textoBusca = ref('')
 const mostrarLista = ref(false)
+const dropdownStyle = ref<Record<string, string>>({})
+const inputRef = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   produtos.carregar()
+})
+
+watch(mostrarLista, async (show) => {
+  if (show && inputRef.value) {
+    await nextTick()
+    const rect = inputRef.value.getBoundingClientRect()
+    dropdownStyle.value = {
+      left: `${rect.left}px`,
+      top: `${rect.bottom + 8}px`,
+      width: `${rect.width}px`
+    }
+  }
 })
 
 // pré-preenche o texto de busca quando já vem um produto selecionado (edição) —
