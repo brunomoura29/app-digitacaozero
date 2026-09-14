@@ -92,7 +92,15 @@
         >
           Validar
         </BaseButton>
-        <BaseButton v-if="podeEditar" to="/pedidos" variant="secondary">
+        <BaseButton
+          v-if="pedido.status === 'em_validacao' && podeValidar"
+          @click="voltarParaEditar"
+          variant="secondary"
+          :loading="salvando"
+        >
+          Voltar para Editar
+        </BaseButton>
+        <BaseButton v-if="podeEditar || pedido.status === 'em_validacao'" to="/pedidos" variant="secondary">
           Voltar
         </BaseButton>
       </div>
@@ -126,7 +134,7 @@ const form = reactive({
   itens: [] as PedidoItem[]
 })
 
-const podeEditar = computed(() => ['rascunho', 'rejeitado'].includes(pedido.value?.status ?? ''))
+const podeEditar = computed(() => ['rascunho', 'rejeitado', 'em_validacao'].includes(pedido.value?.status ?? ''))
 const podeValidar = computed(() => pedido.value?.status === 'rascunho' && auth.isAdmin)
 
 const subtotal = computed(() => form.itens.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0))
@@ -217,6 +225,32 @@ async function validar() {
   } catch (err) {
     console.error('Erro inesperado:', err)
     toast.error('Não foi possível validar o pedido')
+  } finally {
+    salvando.value = false
+  }
+}
+
+async function voltarParaEditar() {
+  if (!pedido.value) return
+  salvando.value = true
+  try {
+    const supabase = useSupabaseClient()
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ status: 'rascunho' as StatusPedido })
+      .eq('id', pedido.value.id)
+
+    if (error) {
+      console.error('Erro ao voltar:', error)
+      toast.error(`Erro: ${error.message}`)
+      return
+    }
+
+    pedido.value.status = 'rascunho'
+    toast.success('Pedido retornou para edição')
+  } catch (err) {
+    console.error('Erro inesperado:', err)
+    toast.error('Não foi possível voltar para editar')
   } finally {
     salvando.value = false
   }
