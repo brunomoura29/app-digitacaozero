@@ -100,9 +100,33 @@
         >
           Voltar para Editar
         </BaseButton>
+        <BaseButton
+          v-if="pedido.status === 'em_validacao'"
+          @click="gerarLink"
+          variant="primary"
+          :loading="gerando"
+        >
+          Gerar link para cliente
+        </BaseButton>
         <BaseButton v-if="podeEditar || pedido.status === 'em_validacao'" to="/pedidos" variant="secondary">
           Voltar
         </BaseButton>
+      </div>
+
+      <!-- Modal de link gerado -->
+      <BaseModal v-if="linkGerado" @close="linkGerado = ''">
+        <div class="space-y-4">
+          <h3 class="text-lg font-semibold text-shift3-text">Link para o cliente</h3>
+          <p class="text-sm text-shift3-text-secondary">Envie este link para o cliente aprovar ou rejeitar o pedido:</p>
+          <div class="flex gap-2 rounded-medium border border-shift3-border bg-shift3-bg-light p-3">
+            <input v-model="linkGerado" type="text" readonly class="flex-1 bg-transparent text-sm text-shift3-text outline-none" />
+            <BaseButton size="sm" variant="secondary" @click="copiarLink">
+              Copiar
+            </BaseButton>
+          </div>
+          <BaseButton @click="linkGerado = ''" variant="secondary" class="w-full">Fechar</BaseButton>
+        </div>
+      </BaseModal>
       </div>
     </div>
   </div>
@@ -124,6 +148,8 @@ const id = route.params.id as string
 const pedido = ref<Pedido | null>()
 const pending = ref(true)
 const salvando = ref(false)
+const gerando = ref(false)
+const linkGerado = ref('')
 
 const form = reactive({
   condicao_pagamento: '',
@@ -254,6 +280,41 @@ async function voltarParaEditar() {
   } finally {
     salvando.value = false
   }
+}
+
+async function gerarLink() {
+  if (!pedido.value) return
+  gerando.value = true
+  try {
+    const { criarLink } = useCompartilhamentos()
+    const link = await criarLink(pedido.value.id)
+
+    const supabase = useSupabaseClient()
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ status: 'em_aprovacao' as StatusPedido })
+      .eq('id', pedido.value.id)
+
+    if (error) {
+      console.error('Erro ao atualizar status:', error)
+      toast.error('Erro ao gerar link')
+      return
+    }
+
+    pedido.value.status = 'em_aprovacao'
+    linkGerado.value = link
+    toast.success('Link gerado com sucesso!')
+  } catch (err: any) {
+    console.error('Erro inesperado:', err)
+    toast.error(err.message || 'Não foi possível gerar link')
+  } finally {
+    gerando.value = false
+  }
+}
+
+function copiarLink() {
+  navigator.clipboard.writeText(linkGerado.value)
+  toast.success('Link copiado para clipboard!')
 }
 
 const LABELS: Record<StatusPedido, string> = {
