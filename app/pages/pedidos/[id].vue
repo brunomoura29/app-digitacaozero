@@ -93,7 +93,7 @@
           Validar
         </BaseButton>
         <BaseButton
-          v-if="pedido.status === 'em_validacao' && podeValidar"
+          v-if="pedido.status === 'em_validacao'"
           @click="voltarParaEditar"
           variant="secondary"
           :loading="salvando"
@@ -134,7 +134,7 @@ const form = reactive({
   itens: [] as PedidoItem[]
 })
 
-const podeEditar = computed(() => ['rascunho', 'rejeitado', 'em_validacao'].includes(pedido.value?.status ?? ''))
+const podeEditar = computed(() => ['rascunho', 'rejeitado'].includes(pedido.value?.status ?? ''))
 const podeValidar = computed(() => pedido.value?.status === 'rascunho' && auth.isAdmin)
 
 const subtotal = computed(() => form.itens.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0))
