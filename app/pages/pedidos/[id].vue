@@ -127,7 +127,6 @@
           <BaseButton @click="linkGerado = ''" variant="secondary" class="w-full">Fechar</BaseButton>
         </div>
       </BaseModal>
-      </div>
     </div>
   </div>
 </template>
