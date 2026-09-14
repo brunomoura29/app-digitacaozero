@@ -179,11 +179,17 @@ async function validar() {
   salvando.value = true
   try {
     const supabase = useSupabaseClient()
-    const { data: numero } = await supabase.rpc('proximo_numero_pedido')
+    const { data: numero, error: erroRpc } = await supabase.rpc('proximo_numero_pedido')
 
-    await atualizar(pedido.value.id, {
-      numero: numero as string,
-      status: 'em_validacao',
+    if (erroRpc) {
+      console.error('Erro ao gerar número:', erroRpc)
+      toast.error('Erro ao gerar número do pedido')
+      return
+    }
+
+    const dadosUpdate: Partial<Pedido> = {
+      numero: (numero ?? '') as string,
+      status: 'em_validacao' as StatusPedido,
       condicao_pagamento: form.condicao_pagamento,
       prazo_entrega: form.prazo_entrega,
       desconto_valor: form.desconto_valor,
@@ -191,12 +197,25 @@ async function validar() {
       observacoes: form.observacoes,
       subtotal: subtotal.value,
       total: total.value
-    })
+    }
+
+    const { error: erroUpdate } = await supabase
+      .from('pedidos')
+      .update(dadosUpdate)
+      .eq('id', pedido.value.id)
+
+    if (erroUpdate) {
+      console.error('Erro ao atualizar:', erroUpdate)
+      toast.error(`Erro: ${erroUpdate.message}`)
+      return
+    }
+
     pedido.value.status = 'em_validacao'
-    pedido.value.numero = numero as string
+    pedido.value.numero = (numero ?? '') as string
     toast.success('Pedido validado e enviado para aprovação')
     navigateTo('/pedidos')
   } catch (err) {
+    console.error('Erro inesperado:', err)
     toast.error('Não foi possível validar o pedido')
   } finally {
     salvando.value = false
