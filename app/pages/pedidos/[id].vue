@@ -178,7 +178,11 @@ async function validar() {
   }
   salvando.value = true
   try {
+    const supabase = useSupabaseClient()
+    const { data: numero } = await supabase.rpc('proximo_numero_pedido')
+
     await atualizar(pedido.value.id, {
+      numero: numero as string,
       status: 'em_validacao',
       condicao_pagamento: form.condicao_pagamento,
       prazo_entrega: form.prazo_entrega,
@@ -189,6 +193,7 @@ async function validar() {
       total: total.value
     })
     pedido.value.status = 'em_validacao'
+    pedido.value.numero = numero as string
     toast.success('Pedido validado e enviado para aprovação')
     navigateTo('/pedidos')
   } catch (err) {
