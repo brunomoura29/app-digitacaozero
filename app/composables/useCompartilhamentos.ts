@@ -49,11 +49,7 @@ export function useCompartilhamentos() {
       clientes: { nome: pedidoData.cliente_nome }
     }
 
-    const { data: itens, error: erroItens } = await supabase
-      .from('pedidos_itens')
-      .select('*')
-      .eq('pedido_id', pedido.id)
-      .order('posicao', { ascending: true })
+    const { data: itens, error: erroItens } = await supabase.rpc('buscar_itens_por_token', { p_token: token })
 
     if (erroItens) throw erroItens
 
