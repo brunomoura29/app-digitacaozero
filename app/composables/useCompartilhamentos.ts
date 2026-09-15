@@ -19,39 +19,45 @@ export function useCompartilhamentos() {
   }
 
   async function buscarPorToken(token: string): Promise<{ pedido: Pedido; itens: PedidoItem[] } | null> {
-    const { data: compartilhamento, error: erroCompartilhamento } = await supabase
-      .from('compartilhamentos')
-      .select('pedido_id, expirado_em')
-      .eq('token', token)
-      .maybeSingle()
+    const { data: pedidoData, error: erroPedido } = await supabase
+      .rpc('buscar_pedido_por_token', { p_token: token })
+      .single()
 
-    if (erroCompartilhamento || !compartilhamento) {
+    if (erroPedido || !pedidoData) {
       throw new Error('Link inválido ou expirado')
     }
 
-    if (compartilhamento.expirado_em && new Date(compartilhamento.expirado_em) < new Date()) {
-      throw new Error('Link expirado')
-    }
-
-    const { data: pedido, error: erroPedido } = await supabase
-      .from('pedidos')
-      .select('id, empresa_id, extracao_id, cliente_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, criado_em, atualizado_em, clientes(nome)')
-      .eq('id', compartilhamento.pedido_id)
-      .maybeSingle()
-
-    if (erroPedido || !pedido) {
-      throw new Error('Pedido não encontrado')
+    const pedido: Pedido = {
+      id: pedidoData.id,
+      empresa_id: pedidoData.empresa_id,
+      extracao_id: null,
+      cliente_id: pedidoData.cliente_id,
+      numero: pedidoData.numero,
+      status: pedidoData.status,
+      data_emissao: pedidoData.data_emissao,
+      condicao_pagamento: pedidoData.condicao_pagamento,
+      prazo_entrega: pedidoData.prazo_entrega,
+      observacoes: pedidoData.observacoes,
+      dados_extras: {},
+      desconto_valor: pedidoData.desconto_valor,
+      frete_valor: pedidoData.frete_valor,
+      subtotal: pedidoData.subtotal,
+      total: pedidoData.total,
+      pdf_url: null,
+      criado_em: '',
+      atualizado_em: '',
+      clientes: { nome: pedidoData.cliente_nome }
     }
 
     const { data: itens, error: erroItens } = await supabase
       .from('pedidos_itens')
       .select('*')
-      .eq('pedido_id', compartilhamento.pedido_id)
+      .eq('pedido_id', pedido.id)
       .order('posicao', { ascending: true })
 
     if (erroItens) throw erroItens
 
-    return { pedido: pedido as unknown as Pedido, itens: (itens as unknown as PedidoItem[]) ?? [] }
+    return { pedido, itens: (itens as unknown as PedidoItem[]) ?? [] }
   }
 
   async function aprovar(token: string): Promise<void> {
