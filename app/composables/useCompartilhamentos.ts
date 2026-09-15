@@ -61,40 +61,13 @@ export function useCompartilhamentos() {
   }
 
   async function aprovar(token: string): Promise<void> {
-    const { data: compartilhamento, error: erroCompartilhamento } = await supabase
-      .from('compartilhamentos')
-      .select('pedido_id')
-      .eq('token', token)
-      .maybeSingle()
-
-    if (erroCompartilhamento || !compartilhamento) {
-      throw new Error('Link inválido')
-    }
-
-    const { data: numero } = await supabase.rpc('proximo_numero_pedido')
-
-    const { error: erroUpdate } = await supabase
-      .from('pedidos')
-      .update({ status: 'aprovado', numero: numero as string })
-      .eq('id', compartilhamento.pedido_id)
-
-    if (erroUpdate) throw erroUpdate
+    const { error } = await supabase.rpc('aprovar_pedido_por_token', { p_token: token })
+    if (error) throw error
   }
 
   async function rejeitar(token: string): Promise<void> {
-    const { data: compartilhamento, error: erroCompartilhamento } = await supabase
-      .from('compartilhamentos')
-      .select('pedido_id')
-      .eq('token', token)
-      .maybeSingle()
-
-    if (erroCompartilhamento || !compartilhamento) {
-      throw new Error('Link inválido')
-    }
-
-    const { error: erroUpdate } = await supabase.from('pedidos').update({ status: 'rejeitado' }).eq('id', compartilhamento.pedido_id)
-
-    if (erroUpdate) throw erroUpdate
+    const { error } = await supabase.rpc('rejeitar_pedido_por_token', { p_token: token })
+    if (error) throw error
   }
 
   return { criarLink, buscarPorToken, aprovar, rejeitar }
