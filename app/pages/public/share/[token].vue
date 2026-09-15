@@ -104,10 +104,10 @@
 
         <!-- Botões de ação (apenas em em_aprovacao) -->
         <div v-if="pedido.status === 'em_aprovacao'" class="flex flex-wrap gap-3 border-t border-shift3-border pt-6">
-          <BaseButton @click="aprovar" variant="primary" :loading="processando">
+          <BaseButton @click="abrirModal('aprovar')" variant="primary" :loading="processando">
             Aprovar
           </BaseButton>
-          <BaseButton @click="rejeitar" variant="danger" :loading="processando">
+          <BaseButton @click="abrirModal('rejeitar')" variant="danger" :loading="processando">
             Rejeitar
           </BaseButton>
         </div>
@@ -118,9 +118,34 @@
             <span v-else-if="pedido.status === 'rejeitado'" class="text-danger">✕ Este pedido foi rejeitado</span>
             <span v-else class="text-shift3-text-muted">Este pedido ainda não foi enviado para aprovação</span>
           </p>
+          <p v-if="pedido.decidido_por" class="mt-1 text-xs text-shift3-text-muted">
+            por {{ pedido.decidido_por }} em {{ formatDataHora(pedido.decidido_em) }}
+          </p>
         </div>
       </div>
     </div>
+
+    <!-- Modal de confirmação com nome -->
+    <BaseModal v-if="acaoModal" @close="acaoModal = null">
+      <div class="space-y-4">
+        <h3 class="text-lg font-semibold text-shift3-text">
+          {{ acaoModal === 'aprovar' ? 'Aprovar pedido' : 'Rejeitar pedido' }}
+        </h3>
+        <p class="text-sm text-shift3-text-secondary">Informe seu nome para confirmar:</p>
+        <BaseInput v-model="nomeDecisor" placeholder="Seu nome" @keyup.enter="confirmarAcao" />
+        <div class="flex gap-2">
+          <BaseButton
+            :variant="acaoModal === 'aprovar' ? 'primary' : 'danger'"
+            :loading="processando"
+            class="flex-1"
+            @click="confirmarAcao"
+          >
+            Confirmar {{ acaoModal === 'aprovar' ? 'Aprovação' : 'Rejeição' }}
+          </BaseButton>
+          <BaseButton variant="secondary" @click="acaoModal = null">Cancelar</BaseButton>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -140,6 +165,8 @@ const itens = ref<PedidoItem[]>([])
 const pending = ref(true)
 const processando = ref(false)
 const erro = ref('')
+const acaoModal = ref<'aprovar' | 'rejeitar' | null>(null)
+const nomeDecisor = ref('')
 
 const subtotal = computed(() => itens.value.reduce((acc, item) => acc + item.quantidade * item.preco_unitario, 0))
 
@@ -157,27 +184,35 @@ onMounted(async () => {
   }
 })
 
-async function aprovar() {
-  processando.value = true
-  try {
-    await aprovarCompartilhamento(token)
-    toast.success('Pedido aprovado com sucesso!')
-    if (pedido.value) pedido.value.status = 'aprovado' as StatusPedido
-  } catch (err: any) {
-    toast.error(err.message || 'Erro ao aprovar')
-  } finally {
-    processando.value = false
-  }
+function abrirModal(acao: 'aprovar' | 'rejeitar') {
+  nomeDecisor.value = ''
+  acaoModal.value = acao
 }
 
-async function rejeitar() {
+async function confirmarAcao() {
+  if (!nomeDecisor.value.trim()) {
+    toast.error('Informe seu nome')
+    return
+  }
+  const acao = acaoModal.value
   processando.value = true
   try {
-    await rejeitarCompartilhamento(token)
-    toast.success('Pedido rejeitado. Admin será notificado.')
-    if (pedido.value) pedido.value.status = 'rejeitado' as StatusPedido
+    if (acao === 'aprovar') {
+      await aprovarCompartilhamento(token, nomeDecisor.value)
+      toast.success('Pedido aprovado com sucesso!')
+      if (pedido.value) pedido.value.status = 'aprovado' as StatusPedido
+    } else if (acao === 'rejeitar') {
+      await rejeitarCompartilhamento(token, nomeDecisor.value)
+      toast.success('Pedido rejeitado. Admin será notificado.')
+      if (pedido.value) pedido.value.status = 'rejeitado' as StatusPedido
+    }
+    if (pedido.value) {
+      pedido.value.decidido_por = nomeDecisor.value.trim()
+      pedido.value.decidido_em = new Date().toISOString()
+    }
+    acaoModal.value = null
   } catch (err: any) {
-    toast.error(err.message || 'Erro ao rejeitar')
+    toast.error(err.message || 'Erro ao processar')
   } finally {
     processando.value = false
   }
@@ -220,5 +255,10 @@ function formatValor(v: number) {
 function formatData(v: string) {
   const [ano, mes, dia] = v.split('-')
   return `${dia}/${mes}/${ano}`
+}
+
+function formatDataHora(v: string | null) {
+  if (!v) return ''
+  return new Date(v).toLocaleString('pt-BR')
 }
 </script>

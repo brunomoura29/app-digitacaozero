@@ -34,6 +34,8 @@ export interface Pedido {
   subtotal: number
   total: number
   pdf_url: string | null
+  decidido_por: string | null
+  decidido_em: string | null
   criado_em: string
   atualizado_em: string
   clientes: { nome: string } | null

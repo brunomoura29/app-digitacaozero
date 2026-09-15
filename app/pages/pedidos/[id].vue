@@ -15,10 +15,15 @@
           <p class="text-lg font-semibold text-shift3-text">{{ pedido.numero || 'Novo pedido' }}</p>
           <p class="text-sm text-shift3-text-secondary">{{ pedido.clientes?.nome }}</p>
         </div>
-        <span class="inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium" :class="CORES[pedido.status]">
-          <span class="h-1.5 w-1.5 rounded-full" :class="BOLINHAS[pedido.status]" />
-          {{ LABELS[pedido.status] }}
-        </span>
+        <div class="text-right">
+          <span class="inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium" :class="CORES[pedido.status]">
+            <span class="h-1.5 w-1.5 rounded-full" :class="BOLINHAS[pedido.status]" />
+            {{ LABELS[pedido.status] }}
+          </span>
+          <p v-if="pedido.decidido_por" class="mt-1 text-xs text-shift3-text-muted">
+            por {{ pedido.decidido_por }} em {{ formatDataHora(pedido.decidido_em) }}
+          </p>
+        </div>
       </div>
 
       <!-- Informações básicas -->
@@ -350,5 +355,9 @@ function formatValor(v: number) {
 function formatData(v: string) {
   const [ano, mes, dia] = v.split('-')
   return `${dia}/${mes}/${ano}`
+}
+function formatDataHora(v: string | null) {
+  if (!v) return ''
+  return new Date(v).toLocaleString('pt-BR')
 }
 </script>

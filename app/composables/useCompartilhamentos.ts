@@ -44,6 +44,8 @@ export function useCompartilhamentos() {
       subtotal: pedidoData.subtotal,
       total: pedidoData.total,
       pdf_url: null,
+      decidido_por: pedidoData.decidido_por,
+      decidido_em: pedidoData.decidido_em,
       criado_em: '',
       atualizado_em: '',
       clientes: { nome: pedidoData.cliente_nome }
@@ -56,13 +58,13 @@ export function useCompartilhamentos() {
     return { pedido, itens: (itens as unknown as PedidoItem[]) ?? [] }
   }
 
-  async function aprovar(token: string): Promise<void> {
-    const { error } = await supabase.rpc('aprovar_pedido_por_token', { p_token: token })
+  async function aprovar(token: string, nome: string): Promise<void> {
+    const { error } = await supabase.rpc('aprovar_pedido_por_token', { p_token: token, p_nome: nome })
     if (error) throw error
   }
 
-  async function rejeitar(token: string): Promise<void> {
-    const { error } = await supabase.rpc('rejeitar_pedido_por_token', { p_token: token })
+  async function rejeitar(token: string, nome: string): Promise<void> {
+    const { error } = await supabase.rpc('rejeitar_pedido_por_token', { p_token: token, p_nome: nome })
     if (error) throw error
   }
 

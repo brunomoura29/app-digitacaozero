@@ -1,7 +1,7 @@
 import type { Pedido, PedidoFiltros, PedidoInput, PedidoItem } from '~/types/pedido'
 
 const COLUNAS =
-  'id, empresa_id, extracao_id, cliente_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, criado_em, atualizado_em, clientes(nome)'
+  'id, empresa_id, extracao_id, cliente_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, decidido_por, decidido_em, criado_em, atualizado_em, clientes(nome)'
 
 /**
  * CRUD de pedidos. A criação (cabeçalho + itens) passa pela função `criar_pedido`
