@@ -41,6 +41,18 @@
         />
       </div>
 
+      <div v-if="papeis" class="w-52">
+        <label class="mb-1 block text-sm font-medium text-shift3-text">Papel no pedido</label>
+        <select
+          :value="campo.papel ?? ''"
+          class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+          @change="(e) => definirPapel(idx, ((e.target as HTMLSelectElement).value || null) as PapelCampoItem | null)"
+        >
+          <option value="">— Nenhum (informativo) —</option>
+          <option v-for="p in PAPEIS_CAMPO_ITEM" :key="p.valor" :value="p.valor">{{ p.label }}</option>
+        </select>
+      </div>
+
       <div class="flex items-center gap-2 pb-2.5">
         <BaseSwitch :model-value="campo.obrigatorio" @update:model-value="(v) => atualizar(idx, { obrigatorio: v })" />
         <span class="text-xs text-shift3-text-muted">Obrigatório</span>
@@ -63,10 +75,14 @@
 </template>
 
 <script setup lang="ts">
-import { TIPOS_CAMPO } from '~/types/modelo'
-import type { CampoSchema, TipoCampo } from '~/types/modelo'
+import { PAPEIS_CAMPO_ITEM, TIPOS_CAMPO } from '~/types/modelo'
+import type { CampoSchema, PapelCampoItem, TipoCampo } from '~/types/modelo'
 
-const props = defineProps<{ modelValue: CampoSchema[] }>()
+const props = defineProps<{
+  modelValue: CampoSchema[]
+  /** Mostra o seletor "Papel no pedido" — só faz sentido pros campos de item, não do cabeçalho. */
+  papeis?: boolean
+}>()
 const emit = defineEmits<{ 'update:modelValue': [campos: CampoSchema[]] }>()
 
 function adicionar() {
@@ -84,6 +100,16 @@ function adicionar() {
 
 function atualizar(idx: number, parcial: Partial<CampoSchema>) {
   const copia = props.modelValue.map((c, i) => (i === idx ? { ...c, ...parcial } : c))
+  emit('update:modelValue', copia)
+}
+
+/** Cada papel só pode estar em um campo — escolher um novo tira automaticamente dos outros. */
+function definirPapel(idx: number, papel: PapelCampoItem | null) {
+  const copia = props.modelValue.map((c, i) => {
+    if (i === idx) return { ...c, papel }
+    if (papel && c.papel === papel) return { ...c, papel: null }
+    return c
+  })
   emit('update:modelValue', copia)
 }
 

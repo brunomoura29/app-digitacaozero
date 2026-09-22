@@ -19,7 +19,8 @@
     "nuxt": "^4.5.2",
     "pinia": "^4.0.3",
     "vue": "^3.5.42",
-    "vue-router": "^5.3.1"
+    "vue-router": "^5.3.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"
   },
   "devDependencies": {
     "@iconify-json/heroicons": "^1.2.3",

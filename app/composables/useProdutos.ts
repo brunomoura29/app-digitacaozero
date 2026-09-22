@@ -57,6 +57,16 @@ export function useProdutos() {
     return novo
   }
 
+  /** Cria vários produtos numa tacada só — usado no cadastro em lote a partir de itens de pedido sem correspondência. Devolve na mesma ordem da lista enviada. */
+  async function criarEmLote(lista: ProdutoInput[]): Promise<Produto[]> {
+    if (!lista.length) return []
+    const { data, error } = await supabase.from('produtos').insert(lista as any).select(COLUNAS)
+    if (error) throw error
+    const novos = (data as unknown as Produto[]) ?? []
+    itens.value = [...novos, ...itens.value]
+    return novos
+  }
+
   async function atualizar(id: string, dados: ProdutoInput): Promise<Produto> {
     const { data, error } = await supabase
       .from('produtos')
@@ -76,5 +86,5 @@ export function useProdutos() {
     itens.value = itens.value.filter((p) => p.id !== id)
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, atualizar, remover }
+  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, criarEmLote, atualizar, remover }
 }

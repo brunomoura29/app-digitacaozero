@@ -1,54 +1,107 @@
 <template>
   <div class="mx-auto max-w-4xl pb-8">
+    <BaseStepper :steps="ETAPAS_LABEL" :atual="indiceEtapa" class="mb-8" />
+
     <!-- ───── Etapa 1: importar ───── -->
     <div v-if="etapa === 'upload'" class="space-y-8">
-      <p class="text-sm text-shift3-text-secondary">Escolha o template, o cliente e o documento pra extrair</p>
+      <BaseLoadingBar
+        v-if="extraindo"
+        :label="ehPlanilhaAtual ? 'Lendo planilha' : 'Extraindo dados do documento'"
+        :hint="
+          ehPlanilhaAtual
+            ? undefined
+            : 'Documentos com várias páginas ou muitos itens podem levar alguns minutos — pode deixar a aba aberta.'
+        "
+      />
 
-      <section class="space-y-4">
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label class="mb-1 block text-sm font-medium text-shift3-text">Template *</label>
-            <select
-              v-model="modeloId"
-              class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
-            >
-              <option :value="null" disabled>Selecione um template</option>
-              <option v-for="m in modelosAtivos" :key="m.id" :value="m.id">{{ m.nome }}</option>
-            </select>
-            <p v-if="!modelosAtivos.length && !modelos.carregando.value" class="mt-1 text-xs text-shift3-text-muted">
-              Nenhum template ativo — crie um em
-              <NuxtLink to="/templates" class="text-shift3-teal hover:underline">Templates</NuxtLink>.
-            </p>
+      <template v-else>
+        <p class="text-sm text-shift3-text-secondary">
+          Escolha o cliente e o documento — foto/PDF passa pela IA com um template; planilha (XLSX/CSV) é lida
+          direto, sem template.
+        </p>
+
+        <section class="space-y-4">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div v-if="!ehPlanilhaAtual">
+              <label class="mb-1 block text-sm font-medium text-shift3-text">Template *</label>
+              <select
+                v-model="modeloId"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+              >
+                <option :value="null" disabled>Selecione um template</option>
+                <option v-for="m in modelosAtivos" :key="m.id" :value="m.id">{{ m.nome }}</option>
+              </select>
+              <p v-if="!modelosAtivos.length && !modelos.carregando.value" class="mt-1 text-xs text-shift3-text-muted">
+                Nenhum template ativo — crie um em
+                <NuxtLink to="/templates" class="text-shift3-teal hover:underline">Templates</NuxtLink>.
+              </p>
+            </div>
+            <div v-else class="flex items-end pb-2 text-sm text-shift3-text-muted">
+              Planilha detectada — o mapeamento de colunas acontece no próximo passo, sem precisar de template.
+            </div>
+
+            <ClientesClientePicker v-model="clienteId" />
           </div>
 
-          <ClientesClientePicker v-model="clienteId" />
-        </div>
+          <BaseUpload
+            v-model="arquivos"
+            :multiple="false"
+            accept=".pdf,image/*,.xlsx,.xls,.csv"
+            :max-size-mb="20"
+            hint="PDF, foto ou planilha (XLSX/CSV) do pedido — até 20 MB"
+          />
+        </section>
 
-        <BaseUpload
-          v-model="arquivos"
-          :multiple="false"
-          accept=".pdf,image/*"
-          :max-size-mb="20"
-          hint="PDF ou foto do pedido — até 20 MB"
-        />
-      </section>
+        <div class="flex items-center gap-3">
+          <BaseButton
+            v-if="ehPlanilhaAtual"
+            type="button"
+            variant="primary"
+            icon-left="heroicons:table-cells"
+            :disabled="!podeProcessar"
+            @click="mapearPlanilha"
+          >
+            Mapear colunas
+          </BaseButton>
+          <BaseButton
+            v-else
+            type="button"
+            variant="primary"
+            icon-left="heroicons:sparkles"
+            :disabled="!podeProcessar"
+            @click="extrair"
+          >
+            Extrair
+          </BaseButton>
+          <BaseButton type="button" variant="ghost" @click="navigateTo('/pedidos')">Cancelar</BaseButton>
+        </div>
+      </template>
+    </div>
+
+    <!-- ───── Etapa 2: mapeamento de colunas (planilha OU itens extraídos pela IA) ───── -->
+    <div v-else-if="etapa === 'mapeamento'" class="space-y-8">
+      <PedidosMapeamentoColunas
+        v-model="mapeamentoColunas"
+        :colunas="colunasArquivo"
+        :linhas="linhasArquivo"
+        :campos-alvo="camposAlvoAtual"
+      />
 
       <div class="flex items-center gap-3">
         <BaseButton
           type="button"
           variant="primary"
-          icon-left="heroicons:sparkles"
-          :loading="extraindo"
-          :disabled="!podeExtrair"
-          @click="extrair"
+          icon-left="heroicons:check"
+          :disabled="!podeConfirmarMapeamento"
+          @click="confirmarMapeamento"
         >
-          Extrair
+          Continuar
         </BaseButton>
-        <BaseButton type="button" variant="ghost" @click="navigateTo('/pedidos')">Cancelar</BaseButton>
+        <BaseButton type="button" variant="ghost" @click="etapa = 'upload'">Voltar</BaseButton>
       </div>
     </div>
 
-    <!-- ───── Etapa 2: revisão (tabela editável) ───── -->
+    <!-- ───── Etapa 3: revisão (tabela editável) ───── -->
     <div v-else class="space-y-8">
       <div>
         <p class="text-lg font-semibold text-shift3-text">Revisar pedido</p>
@@ -56,6 +109,35 @@
           Cliente: <span class="font-medium text-shift3-text">{{ clienteSelecionado?.nome }}</span>
         </p>
       </div>
+
+      <!-- Fábrica/lista de preço — usada pra buscar o preço unitário ao selecionar o produto -->
+      <section class="space-y-4">
+        <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
+          <Icon name="heroicons:currency-dollar" class="h-5 w-5 text-shift3-teal" />
+          <p class="text-base font-semibold text-shift3-text">Fábrica e lista de preço</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <BaseBuscaOuCria
+            v-model="fabricaId"
+            label="Fábrica"
+            placeholder="Buscar fábrica ou digitar pra criar…"
+            :itens="fabricas.itens.value"
+            :carregando="fabricas.carregando.value"
+            :ao-criar="(nome) => fabricas.criar(nome)"
+          />
+          <BaseBuscaOuCria
+            v-model="referenciaId"
+            label="Referência da tabela"
+            placeholder="Ex: Preço fábrica, Distribuidor…"
+            :itens="referencias.itens.value"
+            :carregando="referencias.carregando.value"
+            :ao-criar="(nome) => referencias.criar(nome)"
+          />
+        </div>
+        <p class="text-xs text-shift3-text-muted">
+          Escolha a fábrica pra preencher o preço unitário automaticamente quando selecionar o produto de cada item.
+        </p>
+      </section>
 
       <!-- Campos do cabeçalho, do jeito que o template definiu -->
       <section v-if="modeloAtual?.schema.campos.length" class="space-y-4">
@@ -90,7 +172,7 @@
           <Icon name="heroicons:table-cells" class="h-5 w-5 text-shift3-teal" />
           <p class="text-base font-semibold text-shift3-text">Itens</p>
         </div>
-        <PedidosItensEditor v-model="itensPedido" />
+        <PedidosItensEditor v-model="itensPedido" :fabrica-id="fabricaId" :referencia-id="referenciaId" />
       </section>
 
       <div class="flex items-center gap-3">
@@ -113,8 +195,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import type { UploadFile } from '~/composables/useUpload'
-import { mapearItensExtraidos } from '~/types/pedido'
-import type { PedidoItemInput } from '~/types/pedido'
+import { lerPlanilha } from '~/composables/useImportarPlanilha'
+import {
+  CAMPOS_ALVO_PADRAO,
+  aplicarMapeamento,
+  camposAlvoDoTemplate,
+  itensDoMapeamento,
+  sugerirMapeamentoColunas
+} from '~/types/pedido'
+import type { CampoAlvo, PedidoItemInput } from '~/types/pedido'
 
 definePageMeta({ layout: 'dashboard', title: 'Novo pedido', backTo: '/pedidos' })
 
@@ -122,20 +211,29 @@ const modelos = useModelos()
 const { extrair: extrairArquivo } = useExtracao()
 const { criar } = usePedidos()
 const clientes = useClientes()
+const fabricas = useFabricas()
+const referencias = useReferenciasTabela()
 const toast = useToast()
 
 onMounted(() => {
   modelos.carregar()
   clientes.carregar()
+  fabricas.carregar()
+  referencias.carregar()
 })
 
 const modelosAtivos = computed(() => modelos.itens.value.filter((m) => m.ativo))
 const modeloAtual = computed(() => modelos.itens.value.find((m) => m.id === modeloId.value) ?? null)
 const clienteSelecionado = computed(() => clientes.itens.value.find((c) => c.id === clienteId.value) ?? null)
 
-const etapa = ref<'upload' | 'revisao'>('upload')
+const ETAPAS_LABEL = ['Importação', 'Mapeamento de colunas', 'Revisão']
+
+const etapa = ref<'upload' | 'mapeamento' | 'revisao'>('upload')
+const indiceEtapa = computed(() => ({ upload: 0, mapeamento: 1, revisao: 2 })[etapa.value])
 const modeloId = ref<string | null>(null)
 const clienteId = ref<string | null>(null)
+const fabricaId = ref<string | null>(null)
+const referenciaId = ref<string | null>(null)
 const arquivos = ref<UploadFile[]>([])
 const extraindo = ref(false)
 const salvando = ref(false)
@@ -144,10 +242,31 @@ const extracaoId = ref<string | null>(null)
 const camposCabecalho = reactive<Record<string, unknown>>({})
 const itensPedido = ref<PedidoItemInput[]>([])
 
-const podeExtrair = computed(() => !!modeloId.value && !!clienteId.value && arquivos.value.length > 0)
+const colunasArquivo = ref<string[]>([])
+const linhasArquivo = ref<Record<string, unknown>[]>([])
+const camposAlvoAtual = ref<CampoAlvo[]>([])
+const mapeamentoColunas = ref<Record<string, string | null>>({})
+
+const EXTENSOES_PLANILHA = ['xlsx', 'xls', 'csv']
+function ehPlanilha(nome: string): boolean {
+  const ext = nome.split('.').pop()?.toLowerCase() ?? ''
+  return EXTENSOES_PLANILHA.includes(ext)
+}
+
+const ehPlanilhaAtual = computed(() => {
+  const nome = arquivos.value[0]?.file.name
+  return !!nome && ehPlanilha(nome)
+})
+
+const podeProcessar = computed(() => {
+  if (!clienteId.value || !arquivos.value.length) return false
+  return ehPlanilhaAtual.value || !!modeloId.value
+})
+
+const podeConfirmarMapeamento = computed(() => Object.values(mapeamentoColunas.value).some(Boolean))
 
 async function extrair() {
-  if (!podeExtrair.value || !modeloId.value) return
+  if (!podeProcessar.value || !modeloId.value) return
   const arquivo = arquivos.value[0]?.file
   if (!arquivo) return
 
@@ -159,19 +278,63 @@ async function extrair() {
     for (const campo of modeloAtual.value?.schema.campos ?? []) {
       camposCabecalho[campo.id] = resposta.dadosExtraidos.campos?.[campo.id] ?? ''
     }
-    itensPedido.value = mapearItensExtraidos(
-      resposta.dadosExtraidos.itens ?? [],
-      modeloAtual.value?.schema.campos_item ?? []
-    )
+
+    // a extração devolve a tabela como impressa no documento (colunas livres) — quem
+    // decide qual coluna vira qual campo do template é o usuário, na tela de mapeamento
+    const camposAlvo = camposAlvoDoTemplate(modeloAtual.value?.schema.campos_item ?? [])
+    const colunas = resposta.dadosExtraidos.colunasItem ?? []
+    const linhas = resposta.dadosExtraidos.linhas ?? []
 
     if (resposta.reaproveitado) toast.info('Esse arquivo já tinha sido extraído antes — reaproveitando o resultado.')
-    etapa.value = 'revisao'
+
+    if (!linhas.length) {
+      // nada extraído pra mapear — segue direto pra revisão, o usuário adiciona itens à mão
+      itensPedido.value = []
+      etapa.value = 'revisao'
+    } else {
+      colunasArquivo.value = colunas
+      linhasArquivo.value = linhas
+      camposAlvoAtual.value = camposAlvo
+      mapeamentoColunas.value = sugerirMapeamentoColunas(colunas, camposAlvo)
+      etapa.value = 'mapeamento'
+    }
   } catch (e) {
     const erro = e as any
     toast.error(erro?.data?.statusMessage || erro?.message || 'Não foi possível extrair o documento')
   } finally {
     extraindo.value = false
   }
+}
+
+/** Lê a planilha no navegador (sem IA) e sugere um mapeamento inicial de colunas pro usuário confirmar. */
+async function mapearPlanilha() {
+  const arquivo = arquivos.value[0]?.file
+  if (!arquivo || !podeProcessar.value) return
+
+  extraindo.value = true
+  try {
+    const { colunas, linhas } = await lerPlanilha(arquivo)
+    if (!colunas.length || !linhas.length) {
+      toast.error('Não encontrei dados nessa planilha — confira se a primeira linha tem os cabeçalhos das colunas.')
+      return
+    }
+
+    colunasArquivo.value = colunas
+    linhasArquivo.value = linhas
+    camposAlvoAtual.value = CAMPOS_ALVO_PADRAO
+    mapeamentoColunas.value = sugerirMapeamentoColunas(colunas, CAMPOS_ALVO_PADRAO)
+    etapa.value = 'mapeamento'
+  } catch {
+    toast.error('Não foi possível ler essa planilha. Confira se o formato do arquivo está correto.')
+  } finally {
+    extraindo.value = false
+  }
+}
+
+function confirmarMapeamento() {
+  const linhasMapeadas = aplicarMapeamento(linhasArquivo.value, mapeamentoColunas.value)
+  itensPedido.value = itensDoMapeamento(linhasMapeadas, camposAlvoAtual.value)
+  etapa.value = 'revisao'
 }
 
 async function salvar() {
@@ -181,6 +344,8 @@ async function salvar() {
     const id = await criar({
       cliente_id: clienteId.value,
       extracao_id: extracaoId.value,
+      fabrica_id: fabricaId.value,
+      referencia_id: referenciaId.value,
       campos: { ...camposCabecalho },
       itens: itensPedido.value
     })

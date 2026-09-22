@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { serverSupabaseClient, serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
-import { extrairDocumento } from '../utils/claude'
+import { extrairDocumento, verificarLegibilidade } from '../utils/claude'
 import type { SchemaModelo } from '~/types/modelo'
 
 const TIPOS_ACEITOS: Record<string, 'imagem' | 'pdf'> = {
@@ -9,6 +9,29 @@ const TIPOS_ACEITOS: Record<string, 'imagem' | 'pdf'> = {
   'image/gif': 'imagem',
   'image/webp': 'imagem',
   'application/pdf': 'pdf'
+}
+
+// o media type que o navegador manda no upload nem sempre bate com o conteúdo real do
+// arquivo (ex.: print/print colado como .png mas os bytes são webp) — a Claude API rejeita
+// nesse caso, então detectamos pelos magic bytes e usamos o tipo real em vez do declarado.
+function detectarMediaType(buffer: Buffer): string | null {
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png'
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg'
+  }
+  if (buffer.length >= 6 && buffer.subarray(0, 6).toString('ascii') === 'GIF87a') return 'image/gif'
+  if (buffer.length >= 6 && buffer.subarray(0, 6).toString('ascii') === 'GIF89a') return 'image/gif'
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp'
+  }
+  if (buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === '%PDF') return 'application/pdf'
+  return null
 }
 
 export default defineEventHandler(async (event) => {
@@ -47,7 +70,8 @@ export default defineEventHandler(async (event) => {
   }
   if (!modeloId) throw createError({ statusCode: 400, statusMessage: 'Selecione um template.' })
 
-  const mediaType = parteArquivo.type ?? ''
+  const buffer = parteArquivo.data as Buffer
+  const mediaType = detectarMediaType(buffer) ?? parteArquivo.type ?? ''
   const tipoOrigem = TIPOS_ACEITOS[mediaType]
   if (!tipoOrigem) {
     throw createError({ statusCode: 400, statusMessage: 'Formato não aceito — envie imagem (JPEG/PNG/GIF/WebP) ou PDF.' })
@@ -65,20 +89,38 @@ export default defineEventHandler(async (event) => {
   if (erroModelo) throw createError({ statusCode: 500, statusMessage: erroModelo.message })
   if (!modelo || !modelo.ativo) throw createError({ statusCode: 404, statusMessage: 'Template não encontrado.' })
 
-  const buffer = parteArquivo.data as Buffer
   const hash = createHash('sha256').update(buffer).digest('hex')
 
-  // dedupe: mesmo arquivo + mesmo template já extraído antes → reaproveita, não gasta de novo
-  const { data: existente } = await client
+  // dedupe: mesmo arquivo + mesmo template já extraído antes → reaproveita, não gasta de novo.
+  // Só reaproveita se o resultado salvo já estiver no formato atual (`linhas`) — um
+  // resultado salvo num formato antigo (de antes de alguma mudança no schema de extração)
+  // quebraria o front, que não sabe mais ler o formato velho. Pega o mais recente primeiro
+  // pra dar preferência a uma extração já "curada" nesse formato, se existir.
+  const { data: candidatos } = await client
     .from('extracoes')
     .select('id, dados_extraidos')
     .eq('arquivo_hash', hash)
     .eq('modelo_id', modelo.id)
     .eq('status', 'concluido')
-    .maybeSingle()
+    .order('criado_em', { ascending: false })
+    .limit(5)
+
+  const existente = candidatos?.find(
+    (c) => c.dados_extraidos && typeof c.dados_extraidos === 'object' && 'linhas' in c.dados_extraidos
+  )
 
   if (existente) {
     return { extracaoId: existente.id, dadosExtraidos: existente.dados_extraidos, reaproveitado: true }
+  }
+
+  // checagem barata (Haiku) antes de gastar a extração cara (Opus): recusa arquivo
+  // ilegível/borrado/em branco sem nem subir pro Storage.
+  const legibilidade = await verificarLegibilidade({ arquivoBuffer: buffer, mediaType, tipoOrigem })
+  if (!legibilidade.legivel) {
+    throw createError({
+      statusCode: 422,
+      statusMessage: legibilidade.motivo?.trim() || 'Arquivo não parece legível — tente uma foto mais nítida ou bem iluminada.'
+    })
   }
 
   // sobe o arquivo original pro Storage antes de chamar a IA

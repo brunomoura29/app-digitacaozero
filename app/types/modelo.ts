@@ -17,12 +17,30 @@ export const TIPOS_CAMPO: { valor: TipoCampo; label: string }[] = [
   { valor: 'booleano', label: 'Sim/Não' }
 ]
 
+/**
+ * Papel que um campo do ITEM cumpre nas colunas fixas de `pedidos_itens`. Só faz sentido
+ * pra `campos_item` (o cabeçalho vai inteiro pra `dados_extras`, sem coluna fixa). Quando
+ * definido explicitamente aqui, tem prioridade sobre a heurística por sinônimo de nome —
+ * resolve o caso de dois campos parecidos no mesmo template (ex: "SKU Fábrica" x "SKU
+ * Cliente") que a heurística sozinha não consegue distinguir.
+ */
+export type PapelCampoItem = 'sku' | 'descricao' | 'quantidade' | 'preco_unitario'
+
+export const PAPEIS_CAMPO_ITEM: { valor: PapelCampoItem; label: string }[] = [
+  { valor: 'sku', label: 'SKU (identifica o produto no catálogo)' },
+  { valor: 'descricao', label: 'Descrição' },
+  { valor: 'quantidade', label: 'Quantidade' },
+  { valor: 'preco_unitario', label: 'Preço unitário' }
+]
+
 export interface CampoSchema {
   id: string
   nome: string
   tipo: TipoCampo
   obrigatorio: boolean
   regex?: string | null
+  /** Só usado em `campos_item` — ver `PapelCampoItem`. */
+  papel?: PapelCampoItem | null
 }
 
 export interface SchemaModelo {

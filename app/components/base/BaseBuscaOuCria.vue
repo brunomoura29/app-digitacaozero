@@ -7,14 +7,15 @@
         type="text"
         :placeholder="placeholder"
         icon="heroicons:magnifying-glass"
+        :disabled="disabled"
         @update:model-value="atualizarBusca"
-        @focus="mostrarLista = true"
+        @focus="!disabled && (mostrarLista = true)"
         @blur="fecharLista"
       />
 
       <!-- Dropdown de resultados -->
       <div
-        v-if="mostrarLista"
+        v-if="mostrarLista && !disabled"
         class="absolute top-full left-0 right-0 z-10 mt-1 max-h-64 overflow-y-auto rounded-lg border border-shift3-border bg-shift3-bg-card shadow-lg"
       >
         <div v-if="carregando" class="p-3 text-sm text-shift3-text-muted">Carregando…</div>
@@ -76,10 +77,11 @@ const props = withDefaults(
     placeholder?: string
     itens: ItemBusca[]
     carregando?: boolean
+    disabled?: boolean
     /** Cria um novo registro com o nome digitado e retorna o item criado. */
     aoCriar: (nome: string) => Promise<ItemBusca>
   }>(),
-  { modelValue: null, placeholder: 'Buscar ou digitar pra criar…', carregando: false }
+  { modelValue: null, placeholder: 'Buscar ou digitar pra criar…', carregando: false, disabled: false }
 )
 
 const emit = defineEmits<{ 'update:modelValue': [id: string | null] }>()

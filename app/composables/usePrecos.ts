@@ -74,5 +74,25 @@ export function usePrecos() {
     itens.value = itens.value.filter((p) => p.id !== id)
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, atualizar, remover }
+  /**
+   * Preço mais recente (maior competência) pra um produto numa fábrica/lista — usado
+   * pra preencher automaticamente o preço unitário quando o item do pedido ganha um
+   * produto. `referenciaId` null busca em qualquer referência (não filtra a coluna).
+   */
+  async function buscarAtual(produtoId: string, fabricaId: string, referenciaId: string | null): Promise<number | null> {
+    let query = supabase
+      .from('precos')
+      .select('valor')
+      .eq('produto_id', produtoId)
+      .eq('fabrica_id', fabricaId)
+      .order('competencia', { ascending: false })
+      .limit(1)
+    if (referenciaId) query = query.eq('referencia_id', referenciaId)
+
+    const { data, error } = await query.maybeSingle()
+    if (error) throw error
+    return data ? Number(data.valor) : null
+  }
+
+  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, atualizar, remover, buscarAtual }
 }

@@ -1,7 +1,7 @@
 import type { Pedido, PedidoFiltros, PedidoInput, PedidoItem } from '~/types/pedido'
 
 const COLUNAS =
-  'id, empresa_id, extracao_id, cliente_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, decidido_por, decidido_em, criado_em, atualizado_em, clientes(nome)'
+  'id, empresa_id, extracao_id, cliente_id, fabrica_id, referencia_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, decidido_por, decidido_em, criado_em, atualizado_em, clientes(nome), fabricas(nome), referencias_tabela(nome)'
 
 /**
  * CRUD de pedidos. A criação (cabeçalho + itens) passa pela função `criar_pedido`
@@ -56,7 +56,9 @@ export function usePedidos() {
       p_cliente_id: dados.cliente_id,
       p_extracao_id: dados.extracao_id,
       p_campos: dados.campos,
-      p_itens: dados.itens
+      p_itens: dados.itens,
+      p_fabrica_id: dados.fabrica_id,
+      p_referencia_id: dados.referencia_id
     })
     if (error) throw error
     return data as string

@@ -37,13 +37,46 @@
         <div />
       </section>
 
+      <!-- Fábrica/lista de preço — usada pra buscar o preço unitário ao selecionar o produto -->
+      <section class="space-y-4">
+        <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
+          <Icon name="heroicons:currency-dollar" class="h-5 w-5 text-shift3-teal" />
+          <p class="text-base font-semibold text-shift3-text">Fábrica e lista de preço</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <BaseBuscaOuCria
+            v-model="form.fabrica_id"
+            label="Fábrica"
+            placeholder="Buscar fábrica ou digitar pra criar…"
+            :itens="fabricas.itens.value"
+            :carregando="fabricas.carregando.value"
+            :ao-criar="(nome) => fabricas.criar(nome)"
+            :disabled="!podeEditar"
+          />
+          <BaseBuscaOuCria
+            v-model="form.referencia_id"
+            label="Referência da tabela"
+            placeholder="Ex: Preço fábrica, Distribuidor…"
+            :itens="referencias.itens.value"
+            :carregando="referencias.carregando.value"
+            :ao-criar="(nome) => referencias.criar(nome)"
+            :disabled="!podeEditar"
+          />
+        </div>
+      </section>
+
       <!-- Itens (editável) -->
       <section class="space-y-4">
         <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
           <Icon name="heroicons:table-cells" class="h-5 w-5 text-shift3-teal" />
           <p class="text-base font-semibold text-shift3-text">Itens</p>
         </div>
-        <PedidosItensEditor v-model="form.itens" :disabled="!podeEditar" />
+        <PedidosItensEditor
+          v-model="form.itens"
+          :disabled="!podeEditar"
+          :fabrica-id="form.fabrica_id"
+          :referencia-id="form.referencia_id"
+        />
       </section>
 
       <!-- Totais -->
@@ -147,6 +180,13 @@ const route = useRoute()
 const { porId, buscarUm, buscarItens, atualizar } = usePedidos()
 const auth = useAuthStore()
 const toast = useToast()
+const fabricas = useFabricas()
+const referencias = useReferenciasTabela()
+
+onMounted(() => {
+  fabricas.carregar()
+  referencias.carregar()
+})
 
 const id = route.params.id as string
 const pedido = ref<Pedido | null>()
@@ -161,6 +201,8 @@ const form = reactive({
   desconto_valor: 0,
   frete_valor: 0,
   observacoes: '',
+  fabrica_id: null as string | null,
+  referencia_id: null as string | null,
   itens: [] as PedidoItem[]
 })
 
@@ -180,6 +222,8 @@ onMounted(async () => {
       form.desconto_valor = pedido.value.desconto_valor || 0
       form.frete_valor = pedido.value.frete_valor || 0
       form.observacoes = pedido.value.observacoes || ''
+      form.fabrica_id = pedido.value.fabrica_id
+      form.referencia_id = pedido.value.referencia_id
     }
   } catch {
     toast.error('Não foi possível carregar o pedido')
@@ -198,6 +242,8 @@ async function salvar() {
       desconto_valor: form.desconto_valor,
       frete_valor: form.frete_valor,
       observacoes: form.observacoes,
+      fabrica_id: form.fabrica_id,
+      referencia_id: form.referencia_id,
       subtotal: subtotal.value,
       total: total.value
     })
@@ -233,6 +279,8 @@ async function validar() {
       desconto_valor: form.desconto_valor,
       frete_valor: form.frete_valor,
       observacoes: form.observacoes,
+      fabrica_id: form.fabrica_id,
+      referencia_id: form.referencia_id,
       subtotal: subtotal.value,
       total: total.value
     }

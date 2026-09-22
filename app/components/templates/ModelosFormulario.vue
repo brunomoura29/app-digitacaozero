@@ -58,8 +58,11 @@
           <Icon name="heroicons:list-bullet" class="h-5 w-5 text-shift3-teal" />
           <p class="text-base font-semibold text-shift3-text">Campos do item</p>
         </div>
-        <p class="text-xs text-shift3-text-muted">Dados que se repetem por linha — ex: SKU, quantidade, preço.</p>
-        <TemplatesCamposEditor v-model="form.schema.campos_item" />
+        <p class="text-xs text-shift3-text-muted">
+          Dados que se repetem por linha — ex: SKU, quantidade, preço. Se o documento trouxer mais de um campo
+          parecido (ex: SKU da fábrica e SKU do cliente), use "Papel no pedido" pra dizer qual é qual.
+        </p>
+        <TemplatesCamposEditor v-model="form.schema.campos_item" papeis />
       </section>
 
       <!-- ───── Dicas pra extração ───── -->
