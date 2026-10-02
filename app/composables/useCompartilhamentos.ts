@@ -4,7 +4,12 @@ export function useCompartilhamentos() {
   const supabase = useSupabaseClient()
 
   async function criarLink(pedidoId: string): Promise<string> {
-    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+    // o token é a única credencial do link público — precisa ser imprevisível (Math.random não é)
+    const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
+
+    // um link válido por pedido: gerar outro invalida os anteriores (expirados ou não)
+    const { error: erroAntigos } = await supabase.from('compartilhamentos').delete().eq('pedido_id', pedidoId)
+    if (erroAntigos) throw erroAntigos
 
     const { error } = await supabase.from('compartilhamentos').insert({
       pedido_id: pedidoId,
@@ -16,6 +21,23 @@ export function useCompartilhamentos() {
 
     const baseUrl = window.location.origin
     return `${baseUrl}/public/share/${token}`
+  }
+
+  /** Link ainda válido do pedido (o mais recente), ou `null` se nunca foi gerado / já expirou. */
+  async function buscarLinkAtual(pedidoId: string): Promise<{ url: string; expiraEm: string | null } | null> {
+    const { data, error } = await supabase
+      .from('compartilhamentos')
+      .select('token, expirado_em')
+      .eq('pedido_id', pedidoId)
+      .order('criado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) throw error
+
+    const linha = data as { token: string; expirado_em: string | null } | null
+    if (!linha) return null
+    if (linha.expirado_em && new Date(linha.expirado_em) <= new Date()) return null
+    return { url: `${window.location.origin}/public/share/${linha.token}`, expiraEm: linha.expirado_em }
   }
 
   async function buscarPorToken(token: string): Promise<{ pedido: Pedido; itens: PedidoItem[] } | null> {
@@ -68,5 +90,5 @@ export function useCompartilhamentos() {
     if (error) throw error
   }
 
-  return { criarLink, buscarPorToken, aprovar, rejeitar }
+  return { criarLink, buscarLinkAtual, buscarPorToken, aprovar, rejeitar }
 }

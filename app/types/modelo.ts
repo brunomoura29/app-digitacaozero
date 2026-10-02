@@ -27,10 +27,23 @@ export const TIPOS_CAMPO: { valor: TipoCampo; label: string }[] = [
 export type PapelCampoItem = 'sku' | 'descricao' | 'quantidade' | 'preco_unitario'
 
 export const PAPEIS_CAMPO_ITEM: { valor: PapelCampoItem; label: string }[] = [
-  { valor: 'sku', label: 'SKU (identifica o produto no catálogo)' },
+  { valor: 'sku', label: 'Código do produto (identifica no catálogo)' },
   { valor: 'descricao', label: 'Descrição' },
   { valor: 'quantidade', label: 'Quantidade' },
   { valor: 'preco_unitario', label: 'Preço unitário' }
+]
+
+/**
+ * Campo do cadastro de produtos com que o código vindo do documento (o campo de item com
+ * papel `sku`) é comparado pra pré-selecionar o produto na revisão do pedido. Cada
+ * documento identifica o produto de um jeito — por isso é definido por template.
+ */
+export type IdentificadorProduto = 'sku' | 'codigo_barras' | 'numero_serie'
+
+export const IDENTIFICADORES_PRODUTO: { valor: IdentificadorProduto; label: string }[] = [
+  { valor: 'sku', label: 'SKU' },
+  { valor: 'codigo_barras', label: 'Código de barras' },
+  { valor: 'numero_serie', label: 'Número de série' }
 ]
 
 export interface CampoSchema {
@@ -50,6 +63,8 @@ export interface SchemaModelo {
   campos_item: CampoSchema[]
   /** Dicas livres pra guiar a extração (prompt da IA). */
   dicas: Record<string, string>
+  /** Ver `IdentificadorProduto`. Templates antigos não têm — vale `sku`. */
+  identificador_produto?: IdentificadorProduto
 }
 
 export function schemaVazio(): SchemaModelo {

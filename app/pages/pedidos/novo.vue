@@ -82,6 +82,8 @@
     <div v-else-if="etapa === 'mapeamento'" class="space-y-8">
       <PedidosMapeamentoColunas
         v-model="mapeamentoColunas"
+        v-model:identificador="identificador"
+        :do-template="!ehPlanilhaAtual"
         :colunas="colunasArquivo"
         :linhas="linhasArquivo"
         :campos-alvo="camposAlvoAtual"
@@ -93,6 +95,7 @@
           variant="primary"
           icon-left="heroicons:check"
           :disabled="!podeConfirmarMapeamento"
+          :loading="vinculando"
           @click="confirmarMapeamento"
         >
           Continuar
@@ -135,7 +138,8 @@
           />
         </div>
         <p class="text-xs text-shift3-text-muted">
-          Escolha a fábrica pra preencher o preço unitário automaticamente quando selecionar o produto de cada item.
+          Escolha a fábrica pra preencher o preço unitário dos itens que já têm produto selecionado — e dos próximos
+          que você selecionar.
         </p>
       </section>
 
@@ -172,7 +176,13 @@
           <Icon name="heroicons:table-cells" class="h-5 w-5 text-shift3-teal" />
           <p class="text-base font-semibold text-shift3-text">Itens</p>
         </div>
-        <PedidosItensEditor v-model="itensPedido" :fabrica-id="fabricaId" :referencia-id="referenciaId" />
+        <PedidosItensEditor
+          v-model="itensPedido"
+          :fabrica-id="fabricaId"
+          :referencia-id="referenciaId"
+          :identificador="identificador"
+          preco-ao-carregar
+        />
       </section>
 
       <div class="flex items-center gap-3">
@@ -201,8 +211,10 @@ import {
   aplicarMapeamento,
   camposAlvoDoTemplate,
   itensDoMapeamento,
-  sugerirMapeamentoColunas
+  sugerirMapeamentoColunas,
+  vincularProdutos
 } from '~/types/pedido'
+import type { IdentificadorProduto } from '~/types/modelo'
 import type { CampoAlvo, PedidoItemInput } from '~/types/pedido'
 
 definePageMeta({ layout: 'dashboard', title: 'Novo pedido', backTo: '/pedidos' })
@@ -213,9 +225,13 @@ const { criar } = usePedidos()
 const clientes = useClientes()
 const fabricas = useFabricas()
 const referencias = useReferenciasTabela()
+const produtos = useProdutos()
 const toast = useToast()
 
 onMounted(() => {
+  // a lista de produtos é compartilhada com a tela /produtos — um filtro esquecido lá
+  // esconderia produtos do vínculo automático e do seletor de produto daqui
+  produtos.filtros.value = { q: '', ativo: 'todos' }
   modelos.carregar()
   clientes.carregar()
   fabricas.carregar()
@@ -246,6 +262,9 @@ const colunasArquivo = ref<string[]>([])
 const linhasArquivo = ref<Record<string, unknown>[]>([])
 const camposAlvoAtual = ref<CampoAlvo[]>([])
 const mapeamentoColunas = ref<Record<string, string | null>>({})
+/** Campo do cadastro de produtos usado pra pré-selecionar o produto — padrão do template, ajustável no mapeamento. */
+const identificador = ref<IdentificadorProduto>('sku')
+const vinculando = ref(false)
 
 const EXTENSOES_PLANILHA = ['xlsx', 'xls', 'csv']
 function ehPlanilha(nome: string): boolean {
@@ -295,6 +314,7 @@ async function extrair() {
       colunasArquivo.value = colunas
       linhasArquivo.value = linhas
       camposAlvoAtual.value = camposAlvo
+      identificador.value = modeloAtual.value?.schema.identificador_produto ?? 'sku'
       mapeamentoColunas.value = sugerirMapeamentoColunas(colunas, camposAlvo)
       etapa.value = 'mapeamento'
     }
@@ -322,6 +342,7 @@ async function mapearPlanilha() {
     colunasArquivo.value = colunas
     linhasArquivo.value = linhas
     camposAlvoAtual.value = CAMPOS_ALVO_PADRAO
+    identificador.value = 'sku'
     mapeamentoColunas.value = sugerirMapeamentoColunas(colunas, CAMPOS_ALVO_PADRAO)
     etapa.value = 'mapeamento'
   } catch {
@@ -331,9 +352,26 @@ async function mapearPlanilha() {
   }
 }
 
-function confirmarMapeamento() {
+/** Converte as linhas mapeadas em itens e já pré-seleciona o produto de cada um pelo código (ver `vincularProdutos`). */
+async function confirmarMapeamento() {
   const linhasMapeadas = aplicarMapeamento(linhasArquivo.value, mapeamentoColunas.value)
-  itensPedido.value = itensDoMapeamento(linhasMapeadas, camposAlvoAtual.value)
+  const itens = itensDoMapeamento(linhasMapeadas, camposAlvoAtual.value)
+
+  vinculando.value = true
+  try {
+    await produtos.carregar()
+    itensPedido.value = vincularProdutos(itens, produtos.itens.value, identificador.value)
+
+    const comCodigo = itensPedido.value.filter((i) => i.sku?.trim()).length
+    const encontrados = itensPedido.value.filter((i) => i.produto_id).length
+    if (comCodigo) toast.info(`${encontrados} de ${itensPedido.value.length} item(ns) com produto encontrado no catálogo.`)
+  } catch {
+    // sem catálogo não dá pra vincular — segue pra revisão e o usuário seleciona à mão
+    itensPedido.value = itens
+    toast.error('Não foi possível carregar os produtos pra pré-selecionar — selecione manualmente.')
+  } finally {
+    vinculando.value = false
+  }
   etapa.value = 'revisao'
 }
 

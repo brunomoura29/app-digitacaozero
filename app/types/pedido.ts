@@ -1,4 +1,5 @@
-import type { CampoSchema, PapelCampoItem } from '~/types/modelo'
+import type { CampoSchema, IdentificadorProduto, PapelCampoItem } from '~/types/modelo'
+import type { Produto } from '~/types/produto'
 
 export type StatusPedido = 'rascunho' | 'em_validacao' | 'em_aprovacao' | 'aprovado' | 'rejeitado' | 'enviado' | 'cancelado'
 export type StatusMatchItem = 'correspondido' | 'nao_correspondido' | 'manual'
@@ -40,7 +41,7 @@ export interface Pedido {
   decidido_em: string | null
   criado_em: string
   atualizado_em: string
-  clientes: { nome: string } | null
+  clientes: { nome: string; email?: string | null; telefone?: string | null } | null
   fabricas: { nome: string } | null
   referencias_tabela: { nome: string } | null
 }
@@ -65,8 +66,79 @@ export interface PedidoInput {
   itens: PedidoItemInput[]
 }
 
+/**
+ * Normaliza um código de produto pra comparação: ignora espaços nas pontas, maiúsculas e
+ * zeros à esquerda ("00123" = "123") — planilha e OCR costumam perder ou ganhar zeros.
+ */
+export function normalizarCodigo(v: unknown): string {
+  return String(v ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^0+(?=.)/, '')
+}
+
+/** Agrupa os produtos ativos pelo código normalizado do campo identificador — mais de um na mesma chave = código ambíguo. */
+export function produtosPorCodigo(produtos: Produto[], identificador: IdentificadorProduto): Map<string, Produto[]> {
+  const mapa = new Map<string, Produto[]>()
+  for (const p of produtos) {
+    if (!p.ativo) continue
+    const codigo = normalizarCodigo(p[identificador])
+    if (!codigo) continue
+    const lista = mapa.get(codigo)
+    if (lista) lista.push(p)
+    else mapa.set(codigo, [p])
+  }
+  return mapa
+}
+
+/**
+ * Pré-seleciona o produto de cada item comparando o código vindo do documento (`sku` do
+ * item) com o campo identificador do catálogo. Se mais de um produto tiver o mesmo código,
+ * fica com o primeiro — a tela de revisão sinaliza pra o usuário conferir.
+ */
+export function vincularProdutos(
+  itens: PedidoItemInput[],
+  produtos: Produto[],
+  identificador: IdentificadorProduto
+): PedidoItemInput[] {
+  const mapa = produtosPorCodigo(produtos, identificador)
+  return itens.map((item) => {
+    const codigo = normalizarCodigo(item.sku)
+    if (!codigo) return item
+    const achado = mapa.get(codigo)?.[0]
+    return achado
+      ? { ...item, produto_id: achado.id, status_match: 'correspondido' }
+      : { ...item, status_match: 'nao_correspondido' }
+  })
+}
+
+/** Campos do cabeçalho que a RPC `atualizar_pedido` grava junto com os itens. */
+export interface PedidoEdicao {
+  condicao_pagamento: string | null
+  prazo_entrega: string | null
+  observacoes: string | null
+  desconto_valor: number
+  frete_valor: number
+  fabrica_id: string | null
+  referencia_id: string | null
+}
+
 export interface PedidoFiltros {
   q: string
+}
+
+/**
+ * Mudanças de status permitidas arrastando o card no Kanban. `em_validacao → em_aprovacao`
+ * não troca o status direto: abre o modal de link do cliente, e o pedido só muda de coluna
+ * quando o link é gerado. `em_aprovacao → rascunho` pede confirmação, porque cancela o link
+ * já enviado ao cliente. Aprovar/rejeitar fica de fora de propósito — registra quem decidiu
+ * e só acontece pelo link do cliente.
+ */
+export const TRANSICOES_KANBAN: Partial<Record<StatusPedido, StatusPedido[]>> = {
+  rascunho: ['em_validacao'],
+  em_validacao: ['rascunho', 'em_aprovacao'],
+  em_aprovacao: ['rascunho'],
+  rejeitado: ['rascunho']
 }
 
 const SINONIMOS: Record<PapelCampoItem, string[]> = {
@@ -119,7 +191,8 @@ export interface CampoAlvo {
  * 4 papéis fixos que viram coluna em `pedidos_itens`.
  */
 export const CAMPOS_ALVO_PADRAO: CampoAlvo[] = [
-  { id: 'sku', nome: 'SKU', papel: 'sku' },
+  // "Código" e não "SKU": na planilha o usuário escolhe se ele é SKU, cód. de barras ou nº de série
+  { id: 'sku', nome: 'Código', papel: 'sku' },
   { id: 'descricao', nome: 'Descrição', papel: 'descricao' },
   { id: 'quantidade', nome: 'Quantidade', papel: 'quantidade' },
   { id: 'preco_unitario', nome: 'Preço unitário', papel: 'preco_unitario' }

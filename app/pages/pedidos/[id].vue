@@ -146,10 +146,56 @@
         >
           Gerar link para cliente
         </BaseButton>
+        <!-- link expirou ou se perdeu: sem isso o pedido ficava preso em "Em Aprovação" -->
+        <BaseButton
+          v-if="pedido.status === 'em_aprovacao' && auth.podeEditarModulo('pedidos')"
+          @click="gerarLink"
+          variant="primary"
+          icon-left="heroicons:link"
+          :loading="gerando"
+        >
+          Gerar novo link
+        </BaseButton>
+        <BaseButton
+          v-if="pedido.status === 'em_aprovacao' && auth.podeEditarModulo('pedidos')"
+          @click="confirmandoVoltar = true"
+          variant="secondary"
+          icon-left="heroicons:pencil-square"
+        >
+          Voltar para edição
+        </BaseButton>
         <BaseButton v-if="podeEditar || pedido.status === 'em_validacao'" to="/pedidos" variant="secondary">
           Voltar
         </BaseButton>
+        <BaseButton
+          v-if="auth.podeExcluirModulo('pedidos')"
+          @click="confirmandoExcluir = true"
+          variant="ghost"
+          icon-left="heroicons:trash"
+          class="ml-auto text-danger"
+        >
+          Excluir
+        </BaseButton>
       </div>
+
+      <BaseConfirmDialog
+        v-model="confirmandoExcluir"
+        title="Excluir pedido?"
+        :message="`${pedido.numero} será apagado com todos os itens e o link do cliente.${pedido.status === 'aprovado' ? ' Este pedido já foi aprovado pelo cliente.' : ''} Não dá pra desfazer.`"
+        confirm-label="Excluir"
+        danger
+        :loading="excluindo"
+        @confirm="excluir"
+      />
+
+      <BaseConfirmDialog
+        v-model="confirmandoVoltar"
+        title="Voltar para edição?"
+        message="O pedido volta para Rascunho e o link enviado ao cliente deixa de funcionar. Depois de alterar, valide e gere um novo link."
+        confirm-label="Voltar para edição"
+        :loading="salvando"
+        @confirm="voltarParaEditar"
+      />
 
       <!-- Modal de link gerado -->
       <BaseModal v-if="linkGerado" @close="linkGerado = ''">
@@ -177,7 +223,7 @@ import { useAuthStore } from '~/stores/auth'
 definePageMeta({ layout: 'dashboard', title: 'Pedido', backTo: '/pedidos' })
 
 const route = useRoute()
-const { porId, buscarUm, buscarItens, atualizar } = usePedidos()
+const { porId, buscarUm, buscarItens, atualizarComItens, validar: validarPedido, voltarParaRascunho, remover } = usePedidos()
 const auth = useAuthStore()
 const toast = useToast()
 const fabricas = useFabricas()
@@ -194,6 +240,9 @@ const pending = ref(true)
 const salvando = ref(false)
 const gerando = ref(false)
 const linkGerado = ref('')
+const confirmandoVoltar = ref(false)
+const confirmandoExcluir = ref(false)
+const excluindo = ref(false)
 
 const form = reactive({
   condicao_pagamento: '',
@@ -232,24 +281,34 @@ onMounted(async () => {
   }
 })
 
+/** Cabeçalho + itens numa transação só (RPC `atualizar_pedido`) — os totais são recalculados no servidor. */
+async function salvarTudo(pedidoId: string) {
+  const atualizado = await atualizarComItens(
+    pedidoId,
+    {
+      condicao_pagamento: form.condicao_pagamento,
+      prazo_entrega: form.prazo_entrega,
+      observacoes: form.observacoes,
+      // v-model.number devolve '' com o campo vazio — o cast pra numeric no banco quebraria
+      desconto_valor: Number(form.desconto_valor) || 0,
+      frete_valor: Number(form.frete_valor) || 0,
+      fabrica_id: form.fabrica_id,
+      referencia_id: form.referencia_id
+    },
+    form.itens
+  )
+  if (atualizado) pedido.value = atualizado
+}
+
 async function salvar() {
   if (!pedido.value) return
   salvando.value = true
   try {
-    await atualizar(pedido.value.id, {
-      condicao_pagamento: form.condicao_pagamento,
-      prazo_entrega: form.prazo_entrega,
-      desconto_valor: form.desconto_valor,
-      frete_valor: form.frete_valor,
-      observacoes: form.observacoes,
-      fabrica_id: form.fabrica_id,
-      referencia_id: form.referencia_id,
-      subtotal: subtotal.value,
-      total: total.value
-    })
+    await salvarTudo(pedido.value.id)
     toast.success('Pedido salvo com sucesso')
-  } catch (err) {
-    toast.error('Não foi possível salvar o pedido')
+  } catch (err: any) {
+    console.error('Erro ao salvar:', err)
+    toast.error(err?.message || 'Não foi possível salvar o pedido')
   } finally {
     salvando.value = false
   }
@@ -262,47 +321,15 @@ async function validar() {
   }
   salvando.value = true
   try {
-    const supabase = useSupabaseClient()
-    const { data: numero, error: erroRpc } = await supabase.rpc('proximo_numero_pedido')
-
-    if (erroRpc) {
-      console.error('Erro ao gerar número:', erroRpc)
-      toast.error('Erro ao gerar número do pedido')
-      return
-    }
-
-    const dadosUpdate: Partial<Pedido> = {
-      numero: (numero ?? '') as string,
-      status: 'em_validacao' as StatusPedido,
-      condicao_pagamento: form.condicao_pagamento,
-      prazo_entrega: form.prazo_entrega,
-      desconto_valor: form.desconto_valor,
-      frete_valor: form.frete_valor,
-      observacoes: form.observacoes,
-      fabrica_id: form.fabrica_id,
-      referencia_id: form.referencia_id,
-      subtotal: subtotal.value,
-      total: total.value
-    }
-
-    const { error: erroUpdate } = await supabase
-      .from('pedidos')
-      .update(dadosUpdate)
-      .eq('id', pedido.value.id)
-
-    if (erroUpdate) {
-      console.error('Erro ao atualizar:', erroUpdate)
-      toast.error(`Erro: ${erroUpdate.message}`)
-      return
-    }
+    await salvarTudo(pedido.value.id)
+    await validarPedido(pedido.value.id)
 
     pedido.value.status = 'em_validacao'
-    pedido.value.numero = (numero ?? '') as string
     toast.success('Pedido validado e enviado para aprovação')
     navigateTo('/pedidos')
-  } catch (err) {
-    console.error('Erro inesperado:', err)
-    toast.error('Não foi possível validar o pedido')
+  } catch (err: any) {
+    console.error('Erro ao validar:', err)
+    toast.error(err?.message || 'Não foi possível validar o pedido')
   } finally {
     salvando.value = false
   }
@@ -312,25 +339,30 @@ async function voltarParaEditar() {
   if (!pedido.value) return
   salvando.value = true
   try {
-    const supabase = useSupabaseClient()
-    const { error } = await supabase
-      .from('pedidos')
-      .update({ status: 'rascunho' as StatusPedido })
-      .eq('id', pedido.value.id)
-
-    if (error) {
-      console.error('Erro ao voltar:', error)
-      toast.error(`Erro: ${error.message}`)
-      return
-    }
-
+    // também cancela o link de aprovação, se houver (pedido vindo de "Em Aprovação")
+    await voltarParaRascunho(pedido.value.id)
     pedido.value.status = 'rascunho'
+    confirmandoVoltar.value = false
     toast.success('Pedido retornou para edição')
-  } catch (err) {
-    console.error('Erro inesperado:', err)
-    toast.error('Não foi possível voltar para editar')
+  } catch (err: any) {
+    console.error('Erro ao voltar:', err)
+    toast.error(err?.message || 'Não foi possível voltar para editar')
   } finally {
     salvando.value = false
+  }
+}
+
+async function excluir() {
+  if (!pedido.value) return
+  excluindo.value = true
+  try {
+    await remover(pedido.value.id)
+    toast.success('Pedido excluído')
+    await navigateTo('/pedidos')
+  } catch (err: any) {
+    toast.error(err?.message || 'Não foi possível excluir o pedido')
+  } finally {
+    excluindo.value = false
   }
 }
 
@@ -341,19 +373,22 @@ async function gerarLink() {
     const { criarLink } = useCompartilhamentos()
     const link = await criarLink(pedido.value.id)
 
-    const supabase = useSupabaseClient()
-    const { error } = await supabase
-      .from('pedidos')
-      .update({ status: 'em_aprovacao' as StatusPedido })
-      .eq('id', pedido.value.id)
+    // "Gerar novo link" (pedido já em aprovação) só troca o link — o status não muda
+    if (pedido.value.status !== 'em_aprovacao') {
+      const supabase = useSupabaseClient()
+      const { error } = await supabase
+        .from('pedidos')
+        .update({ status: 'em_aprovacao' as StatusPedido })
+        .eq('id', pedido.value.id)
 
-    if (error) {
-      console.error('Erro ao atualizar status:', error)
-      toast.error('Erro ao gerar link')
-      return
+      if (error) {
+        console.error('Erro ao atualizar status:', error)
+        toast.error('Erro ao gerar link')
+        return
+      }
+
+      pedido.value.status = 'em_aprovacao'
     }
-
-    pedido.value.status = 'em_aprovacao'
     linkGerado.value = link
     toast.success('Link gerado com sucesso!')
   } catch (err: any) {

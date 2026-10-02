@@ -1,7 +1,7 @@
-import type { Pedido, PedidoFiltros, PedidoInput, PedidoItem } from '~/types/pedido'
+import type { Pedido, PedidoEdicao, PedidoFiltros, PedidoInput, PedidoItem, PedidoItemInput } from '~/types/pedido'
 
 const COLUNAS =
-  'id, empresa_id, extracao_id, cliente_id, fabrica_id, referencia_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, decidido_por, decidido_em, criado_em, atualizado_em, clientes(nome), fabricas(nome), referencias_tabela(nome)'
+  'id, empresa_id, extracao_id, cliente_id, fabrica_id, referencia_id, numero, status, data_emissao, condicao_pagamento, prazo_entrega, observacoes, dados_extras, desconto_valor, frete_valor, subtotal, total, pdf_url, decidido_por, decidido_em, criado_em, atualizado_em, clientes(nome, email, telefone), fabricas(nome), referencias_tabela(nome)'
 
 /**
  * CRUD de pedidos. A criação (cabeçalho + itens) passa pela função `criar_pedido`
@@ -73,11 +73,59 @@ export function usePedidos() {
     }
   }
 
-  async function remover(id: string): Promise<void> {
-    const { error } = await supabase.from('pedidos').delete().eq('id', id)
+  /**
+   * Salva cabeçalho + itens atomicamente (RPC `atualizar_pedido`) — substitui todos os
+   * itens e recalcula subtotal/total no servidor. Só vale pra pedido em rascunho/rejeitado.
+   */
+  async function atualizarComItens(id: string, campos: PedidoEdicao, itensPedido: PedidoItemInput[]): Promise<Pedido | null> {
+    const { error } = await supabase.rpc('atualizar_pedido', {
+      p_pedido_id: id,
+      p_campos: campos,
+      p_itens: itensPedido
+    })
     if (error) throw error
+
+    const atualizado = await buscarUm(id)
+    const idx = itens.value.findIndex((p) => p.id === id)
+    if (atualizado && idx >= 0) itens.value[idx] = atualizado
+    return atualizado
+  }
+
+  /**
+   * rascunho → em_validacao: exige ao menos 1 item. O número da OC já vem do `criar_pedido`
+   * e não é regerado aqui — senão o pedido trocava de número a cada etapa.
+   */
+  async function validar(id: string): Promise<void> {
+    const { count, error: erroItens } = await supabase
+      .from('pedidos_itens')
+      .select('id', { count: 'exact', head: true })
+      .eq('pedido_id', id)
+    if (erroItens) throw erroItens
+    if (!count) throw new Error('Pedido precisa ter pelo menos 1 item')
+
+    await atualizar(id, { status: 'em_validacao' })
+  }
+
+  /**
+   * Devolve o pedido pra edição (rascunho). Apaga os links de aprovação do pedido — o
+   * cliente não pode aprovar uma versão que está sendo alterada; quando o pedido voltar
+   * pra aprovação, gera-se um link novo. (As RPCs por token também recusam pedido em
+   * rascunho/em validação, então o link já "expira" mesmo se sobrar algum.)
+   */
+  async function voltarParaRascunho(id: string): Promise<void> {
+    const { error } = await supabase.from('compartilhamentos').delete().eq('pedido_id', id)
+    if (error) throw error
+    await atualizar(id, { status: 'rascunho' })
+  }
+
+  async function remover(id: string): Promise<void> {
+    // itens e links de aprovação saem junto (FK on delete cascade)
+    const { data, error } = await supabase.from('pedidos').delete().eq('id', id).select('id')
+    if (error) throw error
+    // sem permissão a RLS não dá erro: só não apaga nada — sem isso o card sumiria da tela à toa
+    if (!data?.length) throw new Error('Sem permissão para excluir este pedido')
     itens.value = itens.value.filter((p) => p.id !== id)
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, buscarItens, criar, atualizar, remover }
+  return { itens, carregando, filtros, carregar, porId, buscarUm, buscarItens, criar, atualizar, atualizarComItens, validar, voltarParaRascunho, remover }
 }

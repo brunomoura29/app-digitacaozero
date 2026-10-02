@@ -63,6 +63,20 @@
           parecido (ex: SKU da fábrica e SKU do cliente), use "Papel no pedido" pra dizer qual é qual.
         </p>
         <TemplatesCamposEditor v-model="form.schema.campos_item" papeis />
+
+        <div class="max-w-xs">
+          <label class="mb-1 block text-sm font-medium text-shift3-text">Identificar produto por</label>
+          <select
+            v-model="form.identificador_produto"
+            class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+          >
+            <option v-for="i in IDENTIFICADORES_PRODUTO" :key="i.valor" :value="i.valor">{{ i.label }}</option>
+          </select>
+        </div>
+        <p class="text-xs text-shift3-text-muted">
+          Na revisão do pedido, o valor do campo com papel "Código do produto" é comparado com esse campo do
+          cadastro de produtos — quando acha, o produto já vem selecionado e o preço é puxado da tabela.
+        </p>
       </section>
 
       <!-- ───── Dicas pra extração ───── -->
@@ -103,8 +117,8 @@
 
 <script setup lang="ts">
 import { reactive } from 'vue'
-import { TIPOS_MODELO, schemaVazio } from '~/types/modelo'
-import type { CampoSchema, Modelo, ModeloInput, TipoModelo } from '~/types/modelo'
+import { IDENTIFICADORES_PRODUTO, TIPOS_MODELO, schemaVazio } from '~/types/modelo'
+import type { CampoSchema, IdentificadorProduto, Modelo, ModeloInput, TipoModelo } from '~/types/modelo'
 
 interface Props {
   modo: 'novo' | 'editar'
@@ -125,8 +139,10 @@ const form = reactive<{
   tipo: TipoModelo
   ativo: boolean
   schema: { campos: CampoSchema[]; campos_item: CampoSchema[] }
+  identificador_produto: IdentificadorProduto
   dicas: string
 }>({
+  identificador_produto: props.modelo?.schema?.identificador_produto ?? 'sku',
   nome: props.modelo?.nome ?? '',
   descricao: props.modelo?.descricao ?? '',
   tipo: props.modelo?.tipo ?? 'misto',
@@ -155,6 +171,7 @@ function enviar() {
   const schema = schemaVazio()
   schema.campos = form.schema.campos
   schema.campos_item = form.schema.campos_item
+  schema.identificador_produto = form.identificador_produto
   if (form.dicas.trim()) schema.dicas = { geral: form.dicas.trim() }
 
   emit('submit', {

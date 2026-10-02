@@ -7,6 +7,7 @@
         type="text"
         placeholder="Buscar produto por descrição ou SKU…"
         icon="heroicons:magnifying-glass"
+        :disabled="disabled"
         @update:model-value="atualizarBusca"
         @focus="mostrarLista = true"
         @blur="fecharLista"
@@ -67,11 +68,13 @@ interface Props {
   modelValue?: string | null
   /** Esconde o rótulo "Produto" — útil quando já usado dentro de uma coluna de tabela. */
   hideLabel?: boolean
+  disabled?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: null,
-  hideLabel: false
+  hideLabel: false,
+  disabled: false
 })
 
 const emit = defineEmits<{

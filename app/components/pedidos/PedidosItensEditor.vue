@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-3">
-    <div v-if="itensSemCadastro.length" class="flex flex-wrap items-center justify-between gap-2 rounded-medium border border-shift3-border bg-shift3-bg-light px-3 py-2 text-sm">
+    <div v-if="!disabled && itensSemCadastro.length" class="flex flex-wrap items-center justify-between gap-2 rounded-medium border border-shift3-border bg-shift3-bg-light px-3 py-2 text-sm">
       <span class="text-shift3-text-secondary">
         {{ itensSemCadastro.length }} item(ns) sem produto cadastrado no catálogo.
       </span>
@@ -40,7 +40,7 @@
           <tr v-for="(linha, idx) in linhas" :key="linha._id">
             <td class="px-2 py-2 align-top">
               <input
-                v-if="!linha.produto_id"
+                v-if="!disabled && !linha.produto_id"
                 type="checkbox"
                 class="mt-2 h-4 w-4 accent-shift3-green"
                 :checked="selecionados.has(linha._id)"
@@ -51,15 +51,21 @@
             <td class="px-3 py-2 align-top">
               <ProdutosProdutoPicker
                 hide-label
+                :disabled="disabled"
                 :model-value="linha.produto_id"
                 @update:model-value="(v) => onProdutoSelecionado(idx, v)"
               />
+              <p v-if="qtdComMesmoCodigo(linha) > 1" class="mt-1 flex items-start gap-1 text-xs text-warning">
+                <Icon name="heroicons:exclamation-triangle" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {{ qtdComMesmoCodigo(linha) }} produtos com esse código — confira se é o certo
+              </p>
             </td>
             <td class="px-3 py-2 align-top">
               <input
                 :value="linha.descricao ?? ''"
                 type="text"
-                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+                :disabled="disabled"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:bg-shift3-border/30 disabled:text-shift3-text-muted"
                 @input="(e) => atualizar(idx, { descricao: (e.target as HTMLInputElement).value })"
               />
             </td>
@@ -67,7 +73,8 @@
               <input
                 :value="linha.sku ?? ''"
                 type="text"
-                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+                :disabled="disabled"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:bg-shift3-border/30 disabled:text-shift3-text-muted"
                 @input="(e) => atualizar(idx, { sku: (e.target as HTMLInputElement).value })"
               />
             </td>
@@ -77,7 +84,8 @@
                 type="number"
                 step="0.001"
                 min="0"
-                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+                :disabled="disabled"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:bg-shift3-border/30 disabled:text-shift3-text-muted"
                 @input="(e) => atualizar(idx, { quantidade: Number((e.target as HTMLInputElement).value) || 0 })"
               />
             </td>
@@ -87,10 +95,11 @@
                 type="number"
                 step="0.01"
                 min="0"
-                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+                :disabled="disabled"
+                class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:bg-shift3-border/30 disabled:text-shift3-text-muted"
                 @input="(e) => atualizar(idx, { preco_unitario: Number((e.target as HTMLInputElement).value) || 0 })"
               />
-              <div v-if="semPreco.has(linha._id) && !precoSalvo.has(linha._id)" class="mt-1 space-y-1">
+              <div v-if="!disabled && semPreco.has(linha._id) && !precoSalvo.has(linha._id)" class="mt-1 space-y-1">
                 <p class="text-xs text-shift3-text-muted">Sem preço cadastrado pra esse produto na fábrica/lista escolhida.</p>
                 <label v-if="linha.produto_id" class="flex items-center gap-1.5 text-xs text-shift3-text-secondary">
                   <input
@@ -111,6 +120,7 @@
             </td>
             <td class="px-3 py-2 text-right align-top">
               <BaseButton
+                v-if="!disabled"
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -123,7 +133,7 @@
 
           <tr v-if="!linhas.length">
             <td colspan="8" class="px-3 py-6 text-center text-sm text-shift3-text-muted">
-              Nenhum item ainda — adicione manualmente ou extraia de um documento.
+              {{ disabled ? 'Nenhum item neste pedido.' : 'Nenhum item ainda — adicione manualmente ou extraia de um documento.' }}
             </td>
           </tr>
         </tbody>
@@ -132,9 +142,10 @@
     </div>
 
     <div class="flex items-center justify-between">
-      <BaseButton type="button" variant="secondary" size="sm" icon-left="heroicons:plus" @click="adicionar">
+      <BaseButton v-if="!disabled" type="button" variant="secondary" size="sm" icon-left="heroicons:plus" @click="adicionar">
         Adicionar item
       </BaseButton>
+      <span v-else />
       <p class="text-sm text-shift3-text-secondary">
         Total: <span class="font-semibold text-shift3-text">{{ formatValor(totalGeral) }}</span>
       </p>
@@ -145,7 +156,7 @@
       <div class="space-y-4">
         <h3 class="text-lg font-semibold text-shift3-text">Cadastrar produtos</h3>
         <p class="text-sm text-shift3-text-secondary">
-          Confira ou ajuste SKU e descrição antes de criar — já vêm preenchidos com o que foi extraído/mapeado.
+          Confira ou ajuste o código ({{ rotuloCodigo }}) e a descrição antes de criar — já vêm preenchidos com o que foi extraído/mapeado.
         </p>
 
         <div class="max-h-80 space-y-3 overflow-y-auto pr-1">
@@ -157,7 +168,7 @@
             <input
               v-model="rascunho.sku"
               type="text"
-              placeholder="SKU"
+              :placeholder="rotuloCodigo"
               class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
             />
             <input
@@ -188,7 +199,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { IDENTIFICADORES_PRODUTO } from '~/types/modelo'
+import type { IdentificadorProduto } from '~/types/modelo'
+import { normalizarCodigo, produtosPorCodigo } from '~/types/pedido'
 import type { PedidoItemInput } from '~/types/pedido'
 
 type LinhaEditavel = PedidoItemInput & { _id: string }
@@ -198,6 +212,16 @@ const props = defineProps<{
   /** Fábrica/lista escolhida no pedido — usada pra buscar o preço automaticamente ao selecionar o produto. */
   fabricaId?: string | null
   referenciaId?: string | null
+  /** Somente leitura — pedido fora de rascunho/rejeitado não pode ter itens alterados. */
+  disabled?: boolean
+  /**
+   * Campo do cadastro de produtos pelo qual os itens foram pré-selecionados na importação —
+   * usado pra sinalizar código duplicado no catálogo e pra saber em qual campo gravar o
+   * código no cadastro em lote. Sem ele (edição de pedido já salvo), vale SKU e não sinaliza.
+   */
+  identificador?: IdentificadorProduto
+  /** Busca o preço de tabela dos itens que já chegam com produto (importação) — não usar em pedido salvo, sobrescreveria o preço gravado. */
+  precoAoCarregar?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [itens: PedidoItemInput[]] }>()
 
@@ -313,7 +337,8 @@ async function salvarPrecoNaTabela(idx: number) {
 
 /** Ao trocar o produto da linha, busca o preço mais recente na fábrica/lista do pedido. */
 async function onProdutoSelecionado(idx: number, produtoId: string | null) {
-  atualizar(idx, { produto_id: produtoId })
+  // escolha feita à mão deixa de ser "correspondido" — some o aviso de código duplicado
+  atualizar(idx, { produto_id: produtoId, status_match: 'manual' })
   const linhaId = linhas.value[idx]?._id
   if (!linhaId) return
   semPreco.value.delete(linhaId)
@@ -322,6 +347,26 @@ async function onProdutoSelecionado(idx: number, produtoId: string | null) {
 
   await buscarEAplicarPreco(linhaId, produtoId)
 }
+
+const campoCodigo = computed<IdentificadorProduto>(() => props.identificador ?? 'sku')
+const rotuloCodigo = computed(() => IDENTIFICADORES_PRODUTO.find((i) => i.valor === campoCodigo.value)?.label ?? 'SKU')
+
+const catalogoPorCodigo = computed(() =>
+  props.identificador ? produtosPorCodigo(produtos.itens.value, props.identificador) : null
+)
+
+/** Quantos produtos do catálogo têm o código dessa linha — só conta pra linha pré-selecionada automaticamente. */
+function qtdComMesmoCodigo(linha: LinhaEditavel): number {
+  if (props.disabled || !linha.produto_id || linha.status_match !== 'correspondido') return 0
+  return catalogoPorCodigo.value?.get(normalizarCodigo(linha.sku))?.length ?? 0
+}
+
+onMounted(() => {
+  if (!props.precoAoCarregar || !props.fabricaId) return
+  for (const linha of linhas.value) {
+    if (linha.produto_id) buscarEAplicarPreco(linha._id, linha.produto_id)
+  }
+})
 
 const itensSemCadastro = computed(() => linhas.value.filter((l) => !l.produto_id))
 const todosSemCadastroSelecionados = computed(
@@ -357,7 +402,7 @@ async function confirmarCadastroLote() {
   try {
     const criados = await produtos.criarEmLote(
       validos.map((r) => ({
-        sku: r.sku.trim() || null,
+        sku: null,
         codigo_barras: null,
         descricao: r.descricao.trim(),
         marca_id: null,
@@ -366,7 +411,10 @@ async function confirmarCadastroLote() {
         numero_serie: null,
         unidade: 'UN',
         ncm: null,
-        ativo: true
+        ativo: true,
+        // o código vai pro campo que identifica o produto nessa importação (SKU, cód. de
+        // barras ou nº de série) — senão a próxima importação não acharia o produto
+        [campoCodigo.value]: r.sku.trim() || null
       }))
     )
 
@@ -395,6 +443,7 @@ async function confirmarCadastroLote() {
 watch(
   () => [props.fabricaId, props.referenciaId],
   () => {
+    if (props.disabled) return
     for (const linha of linhas.value) {
       if (linha.produto_id) buscarEAplicarPreco(linha._id, linha.produto_id)
     }
