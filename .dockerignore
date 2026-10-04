@@ -1,0 +1,22 @@
+# dependências e saídas de build — são refeitas dentro da imagem
+node_modules
+.output
+.nuxt
+.nitro
+.cache
+.data
+dist
+
+# segredos locais: nunca entram na imagem (vão como variável de ambiente do container)
+.env
+.env.*
+
+# não fazem parte do app
+.git
+.github
+.claude
+.vscode
+*.log
+*.md
+Dockerfile
+.dockerignore
