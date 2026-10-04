@@ -115,7 +115,8 @@ export default defineEventHandler(async (event) => {
 
   // checagem barata (Haiku) antes de gastar a extração cara (Opus): recusa arquivo
   // ilegível/borrado/em branco sem nem subir pro Storage.
-  const legibilidade = await verificarLegibilidade({ arquivoBuffer: buffer, mediaType, tipoOrigem })
+  const generico = (modelo.schema as SchemaModelo)?.destino === 'dados'
+  const legibilidade = await verificarLegibilidade({ arquivoBuffer: buffer, mediaType, tipoOrigem, generico })
   if (!legibilidade.legivel) {
     throw createError({
       statusCode: 422,
@@ -138,7 +139,8 @@ export default defineEventHandler(async (event) => {
       dicas: schema.dicas?.geral,
       arquivoBuffer: buffer,
       mediaType,
-      tipoOrigem
+      tipoOrigem,
+      generico
     })
 
     const { data: extracao, error: erroInsert } = await client

@@ -48,6 +48,36 @@
   --color-text-secondary: #a5adb7;
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Documento "em papel" (Ordem de Compra): sempre claro, mesmo com o
+   app no dark — os tokens semânticos voltam pros valores do tema claro.
+   ────────────────────────────────────────────────────────────── */
+.papel,
+.dark .papel {
+  color-scheme: light;
+  --s3-bg: 245 247 250;
+  --s3-card: 255 255 255;
+  --s3-border: 232 232 232;
+  --s3-text: 26 26 26;
+  --s3-text-secondary: 102 102 102;
+  --s3-text-muted: 153 153 153;
+  /* mantém faixas e blocos coloridos no PDF (o navegador tira fundos ao imprimir) */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+}
+
 @layer base {
   html {
     font-family: theme('fontFamily.sans');

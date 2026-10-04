@@ -131,13 +131,13 @@ export interface PedidoFiltros {
  * Mudanças de status permitidas arrastando o card no Kanban. `em_validacao → em_aprovacao`
  * não troca o status direto: abre o modal de link do cliente, e o pedido só muda de coluna
  * quando o link é gerado. `em_aprovacao → rascunho` pede confirmação, porque cancela o link
- * já enviado ao cliente. Aprovar/rejeitar fica de fora de propósito — registra quem decidiu
- * e só acontece pelo link do cliente.
+ * já enviado ao cliente. `em_aprovacao → aprovado|rejeitado` é a decisão manual (o cliente
+ * avisou por fora do link): abre uma confirmação pedindo o nome de quem decidiu.
  */
 export const TRANSICOES_KANBAN: Partial<Record<StatusPedido, StatusPedido[]>> = {
   rascunho: ['em_validacao'],
   em_validacao: ['rascunho', 'em_aprovacao'],
-  em_aprovacao: ['rascunho'],
+  em_aprovacao: ['rascunho', 'aprovado', 'rejeitado'],
   rejeitado: ['rascunho']
 }
 

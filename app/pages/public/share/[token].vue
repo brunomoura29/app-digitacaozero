@@ -1,14 +1,7 @@
 <template>
-  <div class="min-h-screen bg-shift3-bg">
-    <!-- Header minimalista -->
-    <div class="border-b border-shift3-border bg-white px-4 py-4 dark:bg-shift3-bg-dark">
-      <div class="mx-auto max-w-4xl">
-        <p class="text-lg font-semibold text-shift3-text">DigitacaoZero</p>
-      </div>
-    </div>
-
-    <div class="mx-auto max-w-4xl px-4 py-8">
-      <div v-if="pending" class="flex items-center gap-2 py-14 text-sm text-shift3-text-muted">
+  <div class="flex min-h-screen flex-col bg-shift3-bg-light print:block print:min-h-0 print:bg-transparent">
+    <div class="mx-auto w-full max-w-[210mm] flex-1 px-4 py-6 sm:py-10 print:max-w-none print:p-0">
+      <div v-if="pending" class="flex items-center justify-center gap-2 py-14 text-sm text-shift3-text-muted">
         <BaseSpinner size="md" /> Carregando…
       </div>
 
@@ -16,112 +9,32 @@
         <p class="mt-2 text-sm text-shift3-text-secondary">{{ erro }}</p>
       </BaseEmptyState>
 
-      <div v-else class="space-y-6">
-        <!-- Header -->
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="text-lg font-semibold text-shift3-text">{{ pedido.numero || 'Novo pedido' }}</p>
-            <p class="text-sm text-shift3-text-secondary">{{ pedido.clientes?.nome }}</p>
-          </div>
-          <span class="inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-medium" :class="CORES[pedido.status]">
-            <span class="h-1.5 w-1.5 rounded-full" :class="BOLINHAS[pedido.status]" />
-            {{ LABELS[pedido.status] }}
-          </span>
-        </div>
+      <PedidosOrdemCompra
+        v-else
+        :pedido="pedido"
+        :itens="itens"
+        :empresa="cabecalho?.empresa"
+        :cliente="cabecalho?.cliente"
+        :fabrica="cabecalho?.fabrica"
+      />
+    </div>
 
-        <!-- Informações básicas -->
-        <section class="grid grid-cols-1 gap-4 rounded-medium border border-shift3-border p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Emissão</label>
-            <p class="mt-1 text-sm text-shift3-text">{{ formatData(pedido.data_emissao) }}</p>
-          </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Condição de Pagamento</label>
-            <p class="mt-1 text-sm text-shift3-text">{{ pedido.condicao_pagamento || '—' }}</p>
-          </div>
-          <div>
-            <label class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Prazo de Entrega</label>
-            <p class="mt-1 text-sm text-shift3-text">{{ pedido.prazo_entrega || '—' }}</p>
-          </div>
-          <div />
-        </section>
+    <!-- Barra de ações — fixa no rodapé da tela, fora do PDF -->
+    <div
+      v-if="pedido"
+      class="sticky bottom-0 border-t border-shift3-border bg-shift3-bg-card/95 px-4 py-3 backdrop-blur print:hidden"
+    >
+      <div class="mx-auto flex max-w-[210mm] flex-wrap items-center gap-2">
+        <BaseButton variant="secondary" icon-left="heroicons:arrow-down-tray" @click="baixarPdf">Baixar PDF</BaseButton>
 
-        <!-- Itens -->
-        <section class="space-y-4">
-          <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
-            <Icon name="heroicons:table-cells" class="h-5 w-5 text-shift3-teal" />
-            <p class="text-base font-semibold text-shift3-text">Itens</p>
-          </div>
-          <div class="overflow-x-auto rounded-medium border border-shift3-border">
-            <table class="w-full text-sm">
-              <thead class="bg-shift3-bg-light">
-                <tr class="border-b border-shift3-border">
-                  <th class="px-4 py-2 text-left font-semibold text-shift3-text">Descrição</th>
-                  <th class="px-4 py-2 text-right font-semibold text-shift3-text">Qtd</th>
-                  <th class="px-4 py-2 text-right font-semibold text-shift3-text">Unitário</th>
-                  <th class="px-4 py-2 text-right font-semibold text-shift3-text">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in itens" :key="item.id" class="border-b border-shift3-border hover:bg-shift3-bg-light">
-                  <td class="px-4 py-3 text-shift3-text">{{ item.descricao || item.descricao_original || '—' }}</td>
-                  <td class="px-4 py-3 text-right text-shift3-text">{{ item.quantidade }}</td>
-                  <td class="px-4 py-3 text-right text-shift3-text">{{ formatValor(item.preco_unitario) }}</td>
-                  <td class="px-4 py-3 text-right font-medium text-shift3-text">{{ formatValor(item.quantidade * item.preco_unitario) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- Totais -->
-        <section class="rounded-medium border border-shift3-border bg-shift3-bg-light p-4">
-          <div class="space-y-2">
-            <div class="flex justify-between text-sm">
-              <span class="text-shift3-text-secondary">Subtotal:</span>
-              <span class="text-shift3-text">{{ formatValor(subtotal) }}</span>
-            </div>
-            <div class="flex justify-between text-sm">
-              <span class="text-shift3-text-secondary">Frete:</span>
-              <span class="text-shift3-text">+ {{ formatValor(pedido.frete_valor) }}</span>
-            </div>
-            <div class="flex justify-between text-sm">
-              <span class="text-shift3-text-secondary">Desconto:</span>
-              <span class="text-shift3-text">- {{ formatValor(pedido.desconto_valor) }}</span>
-            </div>
-            <div class="flex justify-between border-t border-shift3-border pt-2 text-base font-semibold">
-              <span class="text-shift3-text">Total:</span>
-              <span class="text-shift3-text">{{ formatValor(pedido.total) }}</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- Observações -->
-        <section v-if="pedido.observacoes" class="space-y-2 rounded-medium border border-shift3-border p-4">
-          <label class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Observações</label>
-          <p class="text-sm text-shift3-text">{{ pedido.observacoes }}</p>
-        </section>
-
-        <!-- Botões de ação (apenas em em_aprovacao) -->
-        <div v-if="pedido.status === 'em_aprovacao'" class="flex flex-wrap gap-3 border-t border-shift3-border pt-6">
-          <BaseButton @click="abrirModal('aprovar')" variant="primary" :loading="processando">
-            Aprovar
-          </BaseButton>
-          <BaseButton @click="abrirModal('rejeitar')" variant="danger" :loading="processando">
+        <template v-if="pedido.status === 'em_aprovacao'">
+          <BaseButton variant="ghost" class="ml-auto text-danger" :disabled="processando" @click="abrirModal('rejeitar')">
             Rejeitar
           </BaseButton>
-        </div>
-
-        <div v-else class="rounded-medium border border-shift3-border bg-shift3-teal/10 p-4">
-          <p class="text-sm text-shift3-text">
-            <span v-if="pedido.status === 'aprovado'" class="text-shift3-teal">✓ Este pedido foi aprovado</span>
-            <span v-else-if="pedido.status === 'rejeitado'" class="text-danger">✕ Este pedido foi rejeitado</span>
-            <span v-else class="text-shift3-text-muted">Este pedido ainda não foi enviado para aprovação</span>
-          </p>
-          <p v-if="pedido.decidido_por" class="mt-1 text-xs text-shift3-text-muted">
-            por {{ pedido.decidido_por }} em {{ formatDataHora(pedido.decidido_em) }}
-          </p>
-        </div>
+          <BaseButton variant="accent" icon-left="heroicons:check" :loading="processando" @click="abrirModal('aprovar')">
+            Aprovar pedido
+          </BaseButton>
+        </template>
       </div>
     </div>
 
@@ -151,6 +64,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import type { CabecalhoOC } from '~/types/empresa'
 import type { Pedido, PedidoItem, StatusPedido } from '~/types/pedido'
 
 definePageMeta({ layout: 'default', title: 'Pedido' })
@@ -162,13 +76,15 @@ const toast = useToast()
 const token = route.params.token as string
 const pedido = ref<Pedido | null>(null)
 const itens = ref<PedidoItem[]>([])
+const cabecalho = ref<CabecalhoOC | null>(null)
 const pending = ref(true)
 const processando = ref(false)
 const erro = ref('')
 const acaoModal = ref<'aprovar' | 'rejeitar' | null>(null)
 const nomeDecisor = ref('')
 
-const subtotal = computed(() => itens.value.reduce((acc, item) => acc + item.quantidade * item.preco_unitario, 0))
+// o título da aba vira o nome sugerido do arquivo em "Salvar como PDF"
+useHead({ title: computed(() => (pedido.value ? `Ordem de Compra ${pedido.value.numero}` : 'Ordem de Compra')) })
 
 onMounted(async () => {
   try {
@@ -176,6 +92,7 @@ onMounted(async () => {
     if (resultado) {
       pedido.value = resultado.pedido
       itens.value = resultado.itens
+      cabecalho.value = resultado.cabecalho
     }
   } catch (err: any) {
     erro.value = err.message || 'Erro ao carregar pedido'
@@ -183,6 +100,10 @@ onMounted(async () => {
     pending.value = false
   }
 })
+
+function baixarPdf() {
+  window.print()
+}
 
 function abrirModal(acao: 'aprovar' | 'rejeitar') {
   nomeDecisor.value = ''
@@ -216,49 +137,5 @@ async function confirmarAcao() {
   } finally {
     processando.value = false
   }
-}
-
-const LABELS: Record<StatusPedido, string> = {
-  rascunho: 'Rascunho',
-  em_validacao: 'Em Validação',
-  em_aprovacao: 'Em Aprovação',
-  aprovado: 'Aprovado',
-  rejeitado: 'Rejeitado',
-  enviado: 'Enviado',
-  cancelado: 'Cancelado'
-}
-
-const CORES: Record<StatusPedido, string> = {
-  rascunho: 'bg-shift3-border/60 text-shift3-text-muted',
-  em_validacao: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200',
-  em_aprovacao: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200',
-  aprovado: 'bg-success/15 text-success',
-  rejeitado: 'bg-danger/15 text-danger',
-  enviado: 'bg-shift3-green/20 text-shift3-teal',
-  cancelado: 'bg-danger/15 text-danger'
-}
-
-const BOLINHAS: Record<StatusPedido, string> = {
-  rascunho: 'bg-shift3-text-muted',
-  em_validacao: 'bg-blue-500',
-  em_aprovacao: 'bg-yellow-500',
-  aprovado: 'bg-success',
-  rejeitado: 'bg-danger',
-  enviado: 'bg-shift3-teal',
-  cancelado: 'bg-danger'
-}
-
-function formatValor(v: number) {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
-function formatData(v: string) {
-  const [ano, mes, dia] = v.split('-')
-  return `${dia}/${mes}/${ano}`
-}
-
-function formatDataHora(v: string | null) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('pt-BR')
 }
 </script>

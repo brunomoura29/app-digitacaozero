@@ -52,29 +52,36 @@
           />
         </section>
 
-        <div class="flex items-center gap-3">
-          <BaseButton
-            v-if="ehPlanilhaAtual"
-            type="button"
-            variant="primary"
-            icon-left="heroicons:table-cells"
-            :disabled="!podeProcessar"
-            @click="mapearPlanilha"
-          >
-            Mapear colunas
-          </BaseButton>
-          <BaseButton
-            v-else
-            type="button"
-            variant="primary"
-            icon-left="heroicons:sparkles"
-            :disabled="!podeProcessar"
-            @click="extrair"
-          >
-            Extrair
-          </BaseButton>
-          <BaseButton type="button" variant="ghost" @click="navigateTo('/pedidos')">Cancelar</BaseButton>
-        </div>
+        <!-- ───── Ações — teleportadas pra barra fixa do layout (dashboard.vue) ───── -->
+        <ClientOnly>
+          <Teleport to="#dashboard-footer">
+            <div class="border-t border-shift3-border bg-shift3-bg-card px-6 py-4">
+              <div class="mx-auto flex max-w-4xl items-center gap-3">
+                <BaseButton
+                  v-if="ehPlanilhaAtual"
+                  type="button"
+                  variant="primary"
+                  icon-left="heroicons:table-cells"
+                  :disabled="!podeProcessar"
+                  @click="mapearPlanilha"
+                >
+                  Mapear colunas
+                </BaseButton>
+                <BaseButton
+                  v-else
+                  type="button"
+                  variant="primary"
+                  icon-left="heroicons:sparkles"
+                  :disabled="!podeProcessar"
+                  @click="extrair"
+                >
+                  Extrair
+                </BaseButton>
+                <BaseButton type="button" variant="ghost" @click="navigateTo('/pedidos')">Cancelar</BaseButton>
+              </div>
+            </div>
+          </Teleport>
+        </ClientOnly>
       </template>
     </div>
 
@@ -89,19 +96,25 @@
         :campos-alvo="camposAlvoAtual"
       />
 
-      <div class="flex items-center gap-3">
-        <BaseButton
-          type="button"
-          variant="primary"
-          icon-left="heroicons:check"
-          :disabled="!podeConfirmarMapeamento"
-          :loading="vinculando"
-          @click="confirmarMapeamento"
-        >
-          Continuar
-        </BaseButton>
-        <BaseButton type="button" variant="ghost" @click="etapa = 'upload'">Voltar</BaseButton>
-      </div>
+      <ClientOnly>
+        <Teleport to="#dashboard-footer">
+          <div class="border-t border-shift3-border bg-shift3-bg-card px-6 py-4">
+            <div class="mx-auto flex max-w-4xl items-center gap-3">
+              <BaseButton
+                type="button"
+                variant="primary"
+                icon-left="heroicons:check"
+                :disabled="!podeConfirmarMapeamento"
+                :loading="vinculando"
+                @click="confirmarMapeamento"
+              >
+                Continuar
+              </BaseButton>
+              <BaseButton type="button" variant="ghost" @click="etapa = 'upload'">Voltar</BaseButton>
+            </div>
+          </div>
+        </Teleport>
+      </ClientOnly>
     </div>
 
     <!-- ───── Etapa 3: revisão (tabela editável) ───── -->
@@ -185,19 +198,25 @@
         />
       </section>
 
-      <div class="flex items-center gap-3">
-        <BaseButton
-          type="button"
-          variant="primary"
-          icon-left="heroicons:check"
-          :loading="salvando"
-          :disabled="!itensPedido.length"
-          @click="salvar"
-        >
-          Validar e salvar
-        </BaseButton>
-        <BaseButton type="button" variant="ghost" @click="etapa = 'upload'">Voltar</BaseButton>
-      </div>
+      <ClientOnly>
+        <Teleport to="#dashboard-footer">
+          <div class="border-t border-shift3-border bg-shift3-bg-card px-6 py-4">
+            <div class="mx-auto flex max-w-4xl items-center gap-3">
+              <BaseButton
+                type="button"
+                variant="primary"
+                icon-left="heroicons:check"
+                :loading="salvando"
+                :disabled="!itensPedido.length"
+                @click="salvar"
+              >
+                Validar e salvar
+              </BaseButton>
+              <BaseButton type="button" variant="ghost" @click="etapa = 'upload'">Voltar</BaseButton>
+            </div>
+          </div>
+        </Teleport>
+      </ClientOnly>
     </div>
   </div>
 </template>
@@ -214,6 +233,7 @@ import {
   sugerirMapeamentoColunas,
   vincularProdutos
 } from '~/types/pedido'
+import { destinoDoModelo } from '~/types/modelo'
 import type { IdentificadorProduto } from '~/types/modelo'
 import type { CampoAlvo, PedidoItemInput } from '~/types/pedido'
 
@@ -238,7 +258,8 @@ onMounted(() => {
   referencias.carregar()
 })
 
-const modelosAtivos = computed(() => modelos.itens.value.filter((m) => m.ativo))
+// templates de "dados para análise" são usados em /importacoes, não aqui
+const modelosAtivos = computed(() => modelos.itens.value.filter((m) => m.ativo && destinoDoModelo(m) === 'pedido'))
 const modeloAtual = computed(() => modelos.itens.value.find((m) => m.id === modeloId.value) ?? null)
 const clienteSelecionado = computed(() => clientes.itens.value.find((c) => c.id === clienteId.value) ?? null)
 

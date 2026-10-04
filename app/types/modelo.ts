@@ -46,6 +46,23 @@ export const IDENTIFICADORES_PRODUTO: { valor: IdentificadorProduto; label: stri
   { valor: 'numero_serie', label: 'Número de série' }
 ]
 
+/**
+ * Pra onde vão os dados importados com o template: `pedido` (Ordem de Compra — o fluxo
+ * original) ou `dados` (conjunto de dados pra análise/Power BI, em /importacoes — aí
+ * `campos_item` são as colunas do conjunto e `papel`/`identificador_produto` não se aplicam).
+ */
+export type DestinoModelo = 'pedido' | 'dados'
+
+export const DESTINOS_MODELO: { valor: DestinoModelo; label: string }[] = [
+  { valor: 'pedido', label: 'Pedido (Ordem de Compra)' },
+  { valor: 'dados', label: 'Dados para análise (Power BI)' }
+]
+
+/** Templates criados antes dessa opção não têm `destino` — valem como `pedido`. */
+export function destinoDoModelo(modelo: { schema?: SchemaModelo | null } | null | undefined): DestinoModelo {
+  return modelo?.schema?.destino ?? 'pedido'
+}
+
 export interface CampoSchema {
   id: string
   nome: string
@@ -65,6 +82,8 @@ export interface SchemaModelo {
   dicas: Record<string, string>
   /** Ver `IdentificadorProduto`. Templates antigos não têm — vale `sku`. */
   identificador_produto?: IdentificadorProduto
+  /** Ver `DestinoModelo`. Ausente = `pedido`. */
+  destino?: DestinoModelo
 }
 
 export function schemaVazio(): SchemaModelo {

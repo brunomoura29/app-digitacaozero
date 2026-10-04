@@ -68,6 +68,38 @@
       @confirm="confirmarVoltarParaEdicao"
     />
 
+    <!-- Decisão manual: o cliente avisou por fora do link (telefone, WhatsApp…) -->
+    <BaseModal v-if="decisaoManual" @close="decisaoManual = null">
+      <div class="space-y-4">
+        <h3 class="text-lg font-semibold text-shift3-text">
+          {{ decisaoManual.decisao === 'aprovado' ? 'Aprovar pedido manualmente?' : 'Rejeitar pedido manualmente?' }}
+        </h3>
+        <p class="text-sm text-shift3-text-secondary">
+          {{ decisaoManual.pedido.numero }} de {{ decisaoManual.pedido.clientes?.nome ?? 'cliente desconhecido' }} vai para
+          {{ decisaoManual.decisao === 'aprovado' ? 'Aprovado' : 'Rejeitado' }} sem passar pelo link — o cliente não
+          poderá mais decidir por lá.
+        </p>
+        <BaseInput
+          v-model="nomeDecisor"
+          :label="decisaoManual.decisao === 'aprovado' ? 'Quem aprovou?' : 'Quem rejeitou?'"
+          placeholder="Nome da pessoa no cliente"
+          hint="Fica registrado no pedido, junto com o seu nome e a data."
+          @keyup.enter="confirmarDecisaoManual"
+        />
+        <div class="flex gap-2">
+          <BaseButton
+            :variant="decisaoManual.decisao === 'aprovado' ? 'primary' : 'danger'"
+            :loading="decidindo"
+            class="flex-1"
+            @click="confirmarDecisaoManual"
+          >
+            Confirmar {{ decisaoManual.decisao === 'aprovado' ? 'aprovação' : 'rejeição' }}
+          </BaseButton>
+          <BaseButton variant="secondary" @click="decisaoManual = null">Cancelar</BaseButton>
+        </div>
+      </div>
+    </BaseModal>
+
   </div>
 </template>
 
@@ -77,7 +109,7 @@ import type { Pedido, StatusPedido } from '~/types/pedido'
 
 definePageMeta({ layout: 'dashboard', title: 'Pedidos' })
 
-const { itens, carregando, filtros, carregar, validar, voltarParaRascunho, remover } = usePedidos()
+const { itens, carregando, filtros, carregar, validar, voltarParaRascunho, decidirManual, remover } = usePedidos()
 const auth = useAuthStore()
 const toast = useToast()
 
@@ -104,6 +136,16 @@ async function moverPedido(pedido: Pedido, destino: StatusPedido) {
     pedidoLinkId.value = pedido.id
     return
   }
+  // aprovar/rejeitar na mão: pede o nome de quem decidiu antes de mover
+  if (destino === 'aprovado' || destino === 'rejeitado') {
+    if (!auth.isAdmin) {
+      toast.error('Só administradores podem aprovar ou rejeitar manualmente')
+      return
+    }
+    nomeDecisor.value = pedido.clientes?.nome ?? ''
+    decisaoManual.value = { pedido, decisao: destino }
+    return
+  }
   // mesma regra do botão "Validar" em /pedidos/[id]
   if (destino === 'em_validacao' && !auth.isAdmin) {
     toast.error('Só administradores podem validar pedidos')
@@ -124,6 +166,32 @@ async function moverPedido(pedido: Pedido, destino: StatusPedido) {
     }
   } catch (err: any) {
     toast.error(err?.message || 'Não foi possível mover o pedido')
+  }
+}
+
+// pedido em aprovação aguardando a confirmação da decisão manual
+const decisaoManual = ref<{ pedido: Pedido; decisao: 'aprovado' | 'rejeitado' } | null>(null)
+const nomeDecisor = ref('')
+const decidindo = ref(false)
+
+async function confirmarDecisaoManual() {
+  if (!decisaoManual.value) return
+  const nome = nomeDecisor.value.trim()
+  if (!nome) {
+    toast.error('Informe quem decidiu')
+    return
+  }
+  const { pedido, decisao } = decisaoManual.value
+  decidindo.value = true
+  try {
+    // o registro deixa claro que não veio do link do cliente
+    await decidirManual(pedido.id, decisao, `${nome} (registrado por ${auth.nome})`)
+    toast.success(decisao === 'aprovado' ? 'Pedido aprovado' : 'Pedido rejeitado')
+    decisaoManual.value = null
+  } catch (err: any) {
+    toast.error(err?.message || 'Não foi possível registrar a decisão')
+  } finally {
+    decidindo.value = false
   }
 }
 

@@ -121,8 +121,13 @@ export async function verificarLegibilidade(opts: {
   arquivoBuffer: Buffer
   mediaType: string
   tipoOrigem: 'imagem' | 'pdf'
+  /** Template de "dados para análise": qualquer documento com tabela vale, não só pedido. */
+  generico?: boolean
 }): Promise<ResultadoLegibilidade> {
   const blocoArquivo = construirBlocoArquivo(opts.arquivoBuffer, opts.mediaType, opts.tipoOrigem)
+  const tipoDocumento = opts.generico
+    ? 'um documento com dados em tabela (balancete, relatório, extrato, listagem, planilha impressa etc.)'
+    : 'um documento de pedido de compra (nota, orçamento, pedido, planilha impressa etc.)'
 
   try {
     const response = await getClient().messages.create(
@@ -131,8 +136,8 @@ export async function verificarLegibilidade(opts: {
         max_tokens: 300,
         system:
           'Você faz uma checagem rápida de qualidade antes de uma extração de dados mais cara. ' +
-          'Diga se o arquivo é um documento de pedido de compra (nota, orçamento, pedido, planilha ' +
-          'impressa etc.) legível o suficiente pra extrair dados — texto/números visíveis, página ' +
+          `Diga se o arquivo é ${tipoDocumento} ` +
+          'legível o suficiente pra extrair dados — texto/números visíveis, página ' +
           'certa, não cortado, não borrado/escuro demais, não em branco. Seja permissivo: fotos ' +
           'tortas ou com qualidade mediana mas legíveis devem passar. Só reprove casos claros.',
         messages: [
@@ -184,7 +189,11 @@ export async function extrairDocumento(opts: {
   arquivoBuffer: Buffer
   mediaType: string
   tipoOrigem: 'imagem' | 'pdf'
+  /** Template de "dados para análise": a tabela é de dados quaisquer, não de itens de pedido. */
+  generico?: boolean
 }): Promise<ResultadoExtracao> {
+  const tipoDocumento = opts.generico ? 'documentos com dados em tabela' : 'documentos de pedido de compra'
+  const tipoLinha = opts.generico ? 'registro da tabela' : 'produto'
   const jsonSchema = montarJsonSchemaExtracao(opts.schema.campos)
   const blocoArquivo = construirBlocoArquivo(opts.arquivoBuffer, opts.mediaType, opts.tipoOrigem)
 
@@ -195,13 +204,13 @@ export async function extrairDocumento(opts: {
       model: 'claude-opus-5',
       max_tokens: 64_000,
       system:
-        'Você extrai dados estruturados de documentos de pedido de compra (foto ou PDF). ' +
+        `Você extrai dados estruturados de ${tipoDocumento} (foto ou PDF). ` +
         'Em "campos", extraia SOMENTE os campos definidos no schema — nunca invente valores ' +
         'que não estão no documento; deixe vazio/null quando não encontrar. ' +
         'Em "colunas_item"/"itens", extraia a TABELA DE ITENS exatamente como impressa no ' +
         'documento: primeiro liste os nomes das colunas (cabeçalho da tabela, palavra por ' +
         'palavra como aparece — não traduza nem renomeie), depois uma entrada por linha de ' +
-        'produto, com os valores na MESMA ORDEM das colunas. Não tente decidir qual coluna ' +
+        `${tipoLinha}, com os valores na MESMA ORDEM das colunas. Não tente decidir qual coluna ` +
         '"significa" o quê nem descartar colunas — extraia todas, mesmo repetidas ou parecidas ' +
         '(ex: se houver "Código Fábrica" e "Código Cliente", extraia as duas colunas separadas). ' +
         'Valores da tabela viram texto (string), mesmo quando são números. ' +

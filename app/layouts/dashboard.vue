@@ -63,7 +63,7 @@ const auth = useAuthStore()
 
 // Rotas restritas por módulo/papel — checadas aqui (não no middleware global) porque
 // dependem do perfil já carregado; fazer o middleware esperar isso causou instabilidade.
-const ROTAS_SOMENTE_ADMIN = ['/configuracoes', '/templates']
+const ROTAS_SOMENTE_ADMIN = ['/configuracoes', '/templates', '/importacoes']
 const MODULO_POR_PREFIXO: [string, string][] = [
   ['/clientes', 'clientes'],
   ['/vendedores', 'vendedores'],
@@ -137,6 +137,7 @@ const nav = computed<SidebarItem[]>(() => {
     itens.push({ label: 'Tabela de preço', icon: 'heroicons:currency-dollar', to: '/tabela-preco' })
   }
   if (auth.isAdmin) {
+    itens.push({ label: 'Importações', icon: 'heroicons:arrow-down-on-square-stack', to: '/importacoes' })
     itens.push({ label: 'Templates', icon: 'heroicons:document-duplicate', to: '/templates' })
   }
   if (auth.podeAcessarModulo('relatorios')) {

@@ -118,6 +118,25 @@ export function usePedidos() {
     await atualizar(id, { status: 'rascunho' })
   }
 
+  /**
+   * Aprovação/rejeição manual (o cliente avisou por fora do link). Só vale pra pedido ainda
+   * em aprovação — o filtro de status evita passar por cima de uma decisão que o cliente
+   * tenha acabado de tomar pelo link. Depois disso o link só mostra o pedido, sem decidir.
+   */
+  async function decidirManual(id: string, decisao: 'aprovado' | 'rejeitado', nome: string): Promise<void> {
+    const dados = { status: decisao, decidido_por: nome.trim(), decidido_em: new Date().toISOString() }
+    const { data, error } = await supabase
+      .from('pedidos')
+      .update(dados)
+      .eq('id', id)
+      .eq('status', 'em_aprovacao')
+      .select('id')
+    if (error) throw error
+    if (!data?.length) throw new Error('Este pedido não está mais aguardando aprovação — sincronize a lista')
+    const idx = itens.value.findIndex((p) => p.id === id)
+    if (idx >= 0) itens.value[idx] = { ...itens.value[idx], ...dados }
+  }
+
   async function remover(id: string): Promise<void> {
     // itens e links de aprovação saem junto (FK on delete cascade)
     const { data, error } = await supabase.from('pedidos').delete().eq('id', id).select('id')
@@ -127,5 +146,5 @@ export function usePedidos() {
     itens.value = itens.value.filter((p) => p.id !== id)
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, buscarItens, criar, atualizar, atualizarComItens, validar, voltarParaRascunho, remover }
+  return { itens, carregando, filtros, carregar, porId, buscarUm, buscarItens, criar, atualizar, atualizarComItens, validar, voltarParaRascunho, decidirManual, remover }
 }

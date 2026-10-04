@@ -1,3 +1,4 @@
+import type { CabecalhoOC } from '~/types/empresa'
 import type { Pedido, PedidoItem } from '~/types/pedido'
 
 export function useCompartilhamentos() {
@@ -40,7 +41,9 @@ export function useCompartilhamentos() {
     return { url: `${window.location.origin}/public/share/${linha.token}`, expiraEm: linha.expirado_em }
   }
 
-  async function buscarPorToken(token: string): Promise<{ pedido: Pedido; itens: PedidoItem[] } | null> {
+  async function buscarPorToken(
+    token: string
+  ): Promise<{ pedido: Pedido; itens: PedidoItem[]; cabecalho: CabecalhoOC | null } | null> {
     const { data: pedidoData, error: erroPedido } = await supabase
       .rpc('buscar_pedido_por_token', { p_token: token })
       .single()
@@ -77,7 +80,18 @@ export function useCompartilhamentos() {
 
     if (erroItens) throw erroItens
 
-    return { pedido, itens: (itens as unknown as PedidoItem[]) ?? [] }
+    // representante (logo, CNPJ, contato) + dados completos do cliente. Se falhar, o
+    // documento ainda abre — só fica sem esse cabeçalho.
+    const { data: cabecalho, error: erroCabecalho } = await supabase.rpc('buscar_cabecalho_oc_por_token', {
+      p_token: token
+    })
+    if (erroCabecalho) console.error('Erro ao buscar cabeçalho da OC:', erroCabecalho)
+
+    return {
+      pedido,
+      itens: (itens as unknown as PedidoItem[]) ?? [],
+      cabecalho: erroCabecalho ? null : ((cabecalho as unknown as CabecalhoOC) ?? null)
+    }
   }
 
   async function aprovar(token: string, nome: string): Promise<void> {

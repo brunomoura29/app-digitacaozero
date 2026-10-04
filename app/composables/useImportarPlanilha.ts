@@ -22,3 +22,25 @@ export async function lerPlanilha(arquivo: File): Promise<PlanilhaLida> {
 
   return { colunas, linhas }
 }
+
+export interface AbaLida extends PlanilhaLida {
+  nome: string
+}
+
+/**
+ * Lê TODAS as abas com dados (ex: balancete com uma aba por mês) — usado na importação de
+ * dados, onde cada linha guarda a aba de onde veio. A primeira linha de cada aba é o cabeçalho.
+ */
+export async function lerPlanilhaAbas(arquivo: File): Promise<AbaLida[]> {
+  const XLSX = await import('xlsx')
+  const buffer = await arquivo.arrayBuffer()
+  // cellDates: data do Excel vem como Date (e não como número serial)
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+
+  const abas: AbaLida[] = []
+  for (const nome of workbook.SheetNames) {
+    const linhas = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[nome], { defval: null })
+    if (linhas.length) abas.push({ nome, colunas: Object.keys(linhas[0]), linhas })
+  }
+  return abas
+}

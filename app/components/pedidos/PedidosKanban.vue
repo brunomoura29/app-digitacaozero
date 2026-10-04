@@ -217,6 +217,8 @@ function acoesDoCard(pedido: Pedido): DropdownItem[] {
   }
   if (pedido.status === 'em_aprovacao') {
     acoes.push({ label: 'Link do cliente', icon: 'heroicons:link', onClick: () => emit('linkCliente', pedido) })
+    acoes.push({ label: 'Aprovar manualmente', icon: 'heroicons:check-circle', onClick: () => emit('mover', pedido, 'aprovado') })
+    acoes.push({ label: 'Rejeitar manualmente', icon: 'heroicons:x-circle', onClick: () => emit('mover', pedido, 'rejeitado') })
     acoes.push({ label: 'Voltar para edição', icon: 'heroicons:pencil-square', onClick: () => emit('mover', pedido, 'rascunho') })
   }
   if (pedido.status === 'em_validacao' || pedido.status === 'rejeitado') {

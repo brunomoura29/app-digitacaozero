@@ -25,7 +25,7 @@
       </div>
     </div>
 
-    <div class="rounded-medium border border-shift3-border bg-shift3-bg-light p-3">
+    <div v-if="identificador" class="rounded-medium border border-shift3-border bg-shift3-bg-light p-3">
       <div class="max-w-xs">
         <label class="mb-1 block text-sm font-medium text-shift3-text">Identificar produto por</label>
         <select
@@ -80,8 +80,11 @@ const props = defineProps<{
   /** Campos-alvo pra onde mapear — os campos do Template selecionado (extração por IA) ou os 4 papéis fixos (planilha sem template). */
   camposAlvo: CampoAlvo[]
   modelValue: Record<string, string | null>
-  /** Campo do cadastro de produtos usado pra pré-selecionar o produto de cada item (v-model:identificador). */
-  identificador: IdentificadorProduto
+  /**
+   * Campo do cadastro de produtos usado pra pré-selecionar o produto de cada item
+   * (v-model:identificador). Sem ele (importação de dados, que não tem produto) o seletor some.
+   */
+  identificador?: IdentificadorProduto
   /** O valor inicial veio de um Template (extração por IA) — só muda o texto de ajuda. */
   doTemplate?: boolean
 }>()

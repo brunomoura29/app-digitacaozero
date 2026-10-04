@@ -117,66 +117,81 @@
         </div>
       </section>
 
-      <!-- Botões de ação -->
-      <div class="flex flex-wrap gap-2 border-t border-shift3-border pt-4">
-        <BaseButton v-if="podeEditar" @click="salvar" variant="primary" :loading="salvando">
-          Salvar
-        </BaseButton>
-        <BaseButton
-          v-if="pedido.status === 'rascunho' && podeValidar"
-          @click="validar"
-          variant="primary"
-          :loading="salvando"
-        >
-          Validar
-        </BaseButton>
-        <BaseButton
-          v-if="pedido.status === 'em_validacao'"
-          @click="voltarParaEditar"
-          variant="secondary"
-          :loading="salvando"
-        >
-          Voltar para Editar
-        </BaseButton>
-        <BaseButton
-          v-if="pedido.status === 'em_validacao'"
-          @click="gerarLink"
-          variant="primary"
-          :loading="gerando"
-        >
-          Gerar link para cliente
-        </BaseButton>
-        <!-- link expirou ou se perdeu: sem isso o pedido ficava preso em "Em Aprovação" -->
-        <BaseButton
-          v-if="pedido.status === 'em_aprovacao' && auth.podeEditarModulo('pedidos')"
-          @click="gerarLink"
-          variant="primary"
-          icon-left="heroicons:link"
-          :loading="gerando"
-        >
-          Gerar novo link
-        </BaseButton>
-        <BaseButton
-          v-if="pedido.status === 'em_aprovacao' && auth.podeEditarModulo('pedidos')"
-          @click="confirmandoVoltar = true"
-          variant="secondary"
-          icon-left="heroicons:pencil-square"
-        >
-          Voltar para edição
-        </BaseButton>
-        <BaseButton v-if="podeEditar || pedido.status === 'em_validacao'" to="/pedidos" variant="secondary">
-          Voltar
-        </BaseButton>
-        <BaseButton
-          v-if="auth.podeExcluirModulo('pedidos')"
-          @click="confirmandoExcluir = true"
-          variant="ghost"
-          icon-left="heroicons:trash"
-          class="ml-auto text-danger"
-        >
-          Excluir
-        </BaseButton>
-      </div>
+      <!-- ───── Ações — teleportadas pra barra fixa do layout (dashboard.vue) ───── -->
+      <ClientOnly>
+        <Teleport to="#dashboard-footer">
+          <div class="border-t border-shift3-border bg-shift3-bg-card px-6 py-4">
+            <div class="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
+              <BaseButton v-if="podeEditar" @click="salvar" variant="primary" :loading="salvando">
+                Salvar
+              </BaseButton>
+              <BaseButton
+                v-if="pedido.status === 'rascunho' && podeValidar"
+                @click="validar"
+                variant="primary"
+                :loading="salvando"
+              >
+                Validar
+              </BaseButton>
+              <BaseButton
+                v-if="pedido.status === 'em_validacao'"
+                @click="voltarParaEditar"
+                variant="secondary"
+                :loading="salvando"
+              >
+                Voltar para Editar
+              </BaseButton>
+              <BaseButton
+                v-if="pedido.status === 'em_validacao'"
+                @click="gerarLink"
+                variant="primary"
+                :loading="gerando"
+              >
+                Gerar link para cliente
+              </BaseButton>
+              <!-- link expirou ou se perdeu: sem isso o pedido ficava preso em "Em Aprovação" -->
+              <BaseButton
+                v-if="pedido.status === 'em_aprovacao' && auth.podeEditarModulo('pedidos')"
+                @click="gerarLink"
+                variant="primary"
+                icon-left="heroicons:link"
+                :loading="gerando"
+              >
+                Gerar novo link
+              </BaseButton>
+              <BaseButton
+                v-if="pedido.status === 'em_aprovacao' && auth.podeEditarModulo('pedidos')"
+                @click="confirmandoVoltar = true"
+                variant="secondary"
+                icon-left="heroicons:pencil-square"
+              >
+                Voltar para edição
+              </BaseButton>
+              <BaseButton v-if="podeEditar || pedido.status === 'em_validacao'" to="/pedidos" variant="secondary">
+                Voltar
+              </BaseButton>
+              <!-- nova aba: mostra o que está salvo, sem perder o que estiver sendo editado aqui -->
+              <BaseButton
+                @click="abrirOrdemCompra"
+                variant="ghost"
+                icon-left="heroicons:document-text"
+                class="ml-auto"
+              >
+                Ordem de Compra
+              </BaseButton>
+              <BaseButton
+                v-if="auth.podeExcluirModulo('pedidos')"
+                @click="confirmandoExcluir = true"
+                variant="ghost"
+                icon-left="heroicons:trash"
+                class="text-danger"
+              >
+                Excluir
+              </BaseButton>
+            </div>
+          </div>
+        </Teleport>
+      </ClientOnly>
 
       <BaseConfirmDialog
         v-model="confirmandoExcluir"
@@ -397,6 +412,10 @@ async function gerarLink() {
   } finally {
     gerando.value = false
   }
+}
+
+function abrirOrdemCompra() {
+  window.open(`/pedidos/ordem-${id}`, '_blank')
 }
 
 function copiarLink() {
