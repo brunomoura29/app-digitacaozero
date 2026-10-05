@@ -63,7 +63,7 @@ const auth = useAuthStore()
 
 // Rotas restritas por módulo/papel — checadas aqui (não no middleware global) porque
 // dependem do perfil já carregado; fazer o middleware esperar isso causou instabilidade.
-const ROTAS_SOMENTE_ADMIN = ['/configuracoes', '/templates', '/importacoes']
+const ROTAS_SOMENTE_ADMIN = ['/configuracoes', '/templates', '/importacoes', '/power-bi']
 const MODULO_POR_PREFIXO: [string, string][] = [
   ['/clientes', 'clientes'],
   ['/vendedores', 'vendedores'],
@@ -144,6 +144,7 @@ const nav = computed<SidebarItem[]>(() => {
     itens.push({ label: 'Relatórios', icon: 'heroicons:chart-bar', to: '/relatorios' })
   }
   if (auth.isAdmin) {
+    itens.push({ label: 'Power BI', icon: 'heroicons:chart-bar-square', to: '/power-bi' })
     itens.push({
       label: 'Configurações',
       icon: 'heroicons:cog-6-tooth',
