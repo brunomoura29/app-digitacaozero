@@ -244,6 +244,8 @@ function enviar() {
     : form.schema.campos_item
   if (!paraDados.value) schema.identificador_produto = form.identificador_produto
   if (form.dicas.trim()) schema.dicas = { geral: form.dicas.trim() }
+  // o que o sistema aprendeu sobre a planilha de cada cliente não é editado aqui — só não pode se perder
+  if (paraDados.value && props.modelo?.schema?.layouts) schema.layouts = props.modelo.schema.layouts
 
   emit('submit', {
     nome: form.nome.trim(),

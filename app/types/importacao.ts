@@ -62,9 +62,12 @@ export function converterValor(valor: unknown, tipo: TipoCampo): unknown {
     case 'numero':
     case 'moeda': {
       if (typeof valor === 'number') return valor
-      // contábil: "(1.234,56)" e "1.234,56-" são negativos
-      const negativo = /^\(.*\)$/.test(texto) || /-$/.test(texto)
+      // contábil: "(1.234,56)" e "1.234,56-" são negativos; "1.234,56 C" (credor) também, e
+      // "1.234,56 D" (devedor) é positivo — mesma convenção de quando o Excel só formata o sinal
+      const natureza = texto.match(/\d\s*([dc])$/i)?.[1]?.toLowerCase()
+      const negativo = /^\(.*\)$/.test(texto) || /-$/.test(texto) || natureza === 'c'
       let limpo = texto.replace(/[()\s]|R\$/g, '').replace(/-$/, '')
+      if (natureza) limpo = limpo.slice(0, -1)
       // formato brasileiro: "." separa milhar e "," separa decimal
       if (limpo.includes(',')) limpo = limpo.replace(/\./g, '').replace(',', '.')
       // "1.234" / "1.234.567" sem vírgula: ponto é milhar, não decimal

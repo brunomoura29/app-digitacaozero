@@ -18,6 +18,9 @@ logs
 .fleet
 .idea
 
+# Arquivos de teste de importação (dados reais de clientes)
+amostras/
+
 # Local env files
 .env
 .env.*

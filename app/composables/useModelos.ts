@@ -1,4 +1,4 @@
-import type { Modelo, ModeloFiltros, ModeloInput } from '~/types/modelo'
+import type { LayoutSalvo, Modelo, ModeloFiltros, ModeloInput } from '~/types/modelo'
 
 const COLUNAS = 'id, empresa_id, nome, descricao, versao, tipo, schema, arquivo_exemplo_url, ativo, criado_em, atualizado_em'
 
@@ -63,11 +63,31 @@ export function useModelos() {
     return atualizado
   }
 
+  /**
+   * Guarda como ler a planilha de um cliente nesse template (ver `SchemaModelo.layouts`). Não
+   * é edição do template: não mexe na `versao`, e parte do schema que está no banco agora pra
+   * não desfazer o que outra aba tenha salvado.
+   */
+  async function salvarLayout(id: string, clienteId: string, layout: LayoutSalvo): Promise<void> {
+    const atual = await buscarUm(id)
+    if (!atual) return
+    const schema = { ...atual.schema, layouts: { ...(atual.schema.layouts ?? {}), [clienteId]: layout } }
+    const { data, error } = await supabase
+      .from('modelos')
+      .update({ schema } as any)
+      .eq('id', id)
+      .select(COLUNAS)
+      .single()
+    if (error) throw error
+    const atualizado = data as unknown as Modelo
+    itens.value = itens.value.map((m) => (m.id === id ? atualizado : m))
+  }
+
   async function remover(id: string): Promise<void> {
     const { error } = await supabase.from('modelos').delete().eq('id', id)
     if (error) throw error
     itens.value = itens.value.filter((m) => m.id !== id)
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, atualizar, remover }
+  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, atualizar, salvarLayout, remover }
 }

@@ -148,7 +148,7 @@ const SINONIMOS: Record<PapelCampoItem, string[]> = {
   preco_unitario: ['preco', 'preço', 'valor', 'unitario', 'unitário']
 }
 
-function normalizar(s: string) {
+export function normalizar(s: string) {
   return s
     .toLowerCase()
     .normalize('NFD')
