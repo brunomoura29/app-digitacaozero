@@ -71,15 +71,66 @@ export function nomesUnicos(nomes: string[]): string[] {
   })
 }
 
-/** Monta e devolve o CSV (separador `;`, UTF-8 com BOM). `?baixar=1` força o download com `nomeArquivo`. */
-export function responderCsv(event: H3Event, cabecalho: string[], linhas: unknown[][], nomeArquivo: string): string {
+function linhaCsv(valores: unknown[]): string {
+  return valores.map(celula).join(';')
+}
+
+function cabecalhosDaResposta(event: H3Event, nomeArquivo: string) {
   setHeader(event, 'Content-Type', 'text/csv; charset=utf-8')
   setHeader(event, 'Cache-Control', 'no-store')
   if (getQuery(event).baixar) {
     const nome = nomeArquivo.replace(/[^\w\- ]+/g, '').trim() || 'dados'
     setHeader(event, 'Content-Disposition', `attachment; filename="${nome}.csv"`)
   }
-  const saida = [cabecalho, ...linhas].map((linha) => linha.map(celula).join(';'))
+}
+
+/** Monta e devolve o CSV (separador `;`, UTF-8 com BOM). `?baixar=1` força o download com `nomeArquivo`. */
+export function responderCsv(event: H3Event, cabecalho: string[], linhas: unknown[][], nomeArquivo: string): string {
+  cabecalhosDaResposta(event, nomeArquivo)
+  const saida = [cabecalho, ...linhas].map(linhaCsv)
   // BOM: sem ele o Excel abre os acentos trocados
   return '﻿' + saida.join('\r\n')
+}
+
+/**
+ * Mesmo CSV do `responderCsv`, mas enviado aos poucos: cada bloco de linhas sai assim que é
+ * lido, sem montar o arquivo inteiro na memória — pra conjunto que cresce sem teto (importações).
+ * Blocos vazios não são aceitos (o gerador só deve entregar bloco com linha).
+ *
+ * Se a leitura falhar no meio, a conexão é derrubada em vez de encerrada: um CSV cortado que
+ * terminasse "normalmente" entraria no Power BI como se fosse o dado completo.
+ */
+export async function responderCsvAosPoucos(
+  event: H3Event,
+  cabecalho: string[],
+  blocos: AsyncIterable<unknown[][]>,
+  nomeArquivo: string
+): Promise<ReadableStream<Uint8Array>> {
+  const iterador = blocos[Symbol.asyncIterator]()
+  // o primeiro bloco é lido antes de responder: erro de cara ainda sai como erro HTTP comum
+  let proximo = await iterador.next()
+
+  cabecalhosDaResposta(event, nomeArquivo)
+  const encoder = new TextEncoder()
+  const codificar = (linhas: unknown[][]) => encoder.encode(linhas.map((l) => '\r\n' + linhaCsv(l)).join(''))
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      // BOM: sem ele o Excel abre os acentos trocados
+      controller.enqueue(encoder.encode('﻿' + linhaCsv(cabecalho)))
+    },
+    async pull(controller) {
+      try {
+        if (proximo.done) return controller.close()
+        controller.enqueue(codificar(proximo.value))
+        proximo = await iterador.next()
+      } catch (erro) {
+        event.node.res.destroy(erro as Error)
+        controller.error(erro)
+      }
+    },
+    async cancel() {
+      await iterador.return?.()
+    }
+  })
 }
