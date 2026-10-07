@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AnaliseLayout, CampoSchema, SchemaModelo, TipoCampo } from '~/types/modelo'
+import { ESTILOS_BLOCO, ICONES_BLOCO, IDS_CORES } from '#shared/utils/relatorios'
 
 let clienteAnthropic: Anthropic | null = null
 
@@ -442,4 +443,200 @@ export async function extrairDocumento(opts: {
   })
 
   return { campos: bruto.campos ?? {}, colunasItem, linhas }
+}
+
+/** Erro da API da Anthropic numa frase que faz sentido pra quem está na tela. */
+export function mensagemErroIA(e: unknown, padrao: string): string {
+  if (e instanceof Anthropic.RateLimitError) return 'A IA está ocupada agora — tente de novo em instantes.'
+  if (e instanceof Anthropic.AuthenticationError) return 'A chave da IA não está configurada no servidor.'
+  if (e instanceof Anthropic.APIConnectionError) return 'Não foi possível falar com a IA — confira a conexão do servidor.'
+  if (e instanceof Anthropic.APIError) {
+    // o motivo vem no corpo da resposta; "erro 400" sozinho não diz nada a quem está na tela
+    const detalhe = (e.error as { error?: { message?: string } } | undefined)?.error?.message ?? e.message
+    // saldo esgotado não tem tipo de erro próprio na API (vem como 400 comum) — só dá pra reconhecer pelo texto
+    return /credit balance/i.test(detalhe)
+      ? 'Os créditos da conta da Anthropic (a IA) acabaram — é preciso recarregar em console.anthropic.com, em Plans & Billing.'
+      : `A IA devolveu um erro (${e.status ?? 'sem código'}): ${detalhe}`
+  }
+  return e instanceof Error ? e.message : padrao
+}
+
+const SISTEMA_RELATORIO = `Você monta painéis de análise (dashboards) para um sistema de ordens de compra de um representante comercial. O usuário descreve em português o que quer ver; você devolve a PLANTA do painel. Você NÃO calcula nem inventa números: um programa lê a sua planta e calcula tudo sobre os dados reais. Use somente os ids de campo listados na mensagem.
+
+Como os dados se organizam:
+- Há dois conjuntos de linhas: uma linha por PEDIDO e uma linha por ITEM de pedido. Cada campo diz de qual linha ele sai ("linha de pedido" ou "linha de item").
+- Os cadastros (cliente, vendedor, produto) já vêm colados em cada linha — não existe "relacionar tabelas", é só usar o campo.
+- Um bloco que usa qualquer campo de item passa a ler as linhas de item. Para valores por produto, marca ou fabricante, use "Total do item" e "Quantidade", não o total do pedido.
+- Os campos "item.*" vêm do próprio pedido e estão sempre preenchidos. Os campos "produto.*" vêm do cadastro e ficam vazios quando o item não foi ligado a um produto cadastrado — para ranking de produtos prefira "item.descricao", a não ser que o resumo dos dados mostre o cadastro bem preenchido ou o usuário peça marca, fabricante, unidade ou NCM.
+- Quem abre o link público é um cliente e vê só os pedidos dele; o administrador vê todos.
+
+Blocos (em "blocos", na ordem em que aparecem na tela, da esquerda pra direita e de cima pra baixo):
+- tipo "numero": cartão com um número em destaque. 1 medida, sem grupos. Largura 3.
+- tipo "colunas": barras verticais. Bom pra poucas categorias ou pra evolução no tempo com poucos períodos.
+- tipo "barras": barras horizontais em ranking. Bom pra "os maiores" (produtos, clientes, cidades) e pra nomes compridos.
+- tipo "linha" e "area": evolução no tempo. O 1º grupo deve ser um campo de data com período.
+- tipo "rosca": participação no total. Só quando há poucas categorias (até 5; o resto vira "Outros").
+- tipo "tabela": detalhamento. Vários grupos viram colunas de texto e várias medidas viram colunas de número.
+
+Em cada bloco:
+- "medidas": o que é calculado. "op" pode ser soma, media, minimo, maximo (só em campo de número ou moeda) ou contagem, que conta valores DIFERENTES do campo (contagem de "pedido.numero" = quantidade de pedidos; contagem de "cliente.nome" = quantos clientes). Ticket médio = media de "pedido.total". Gráficos usam uma medida; só coloque duas ou mais no mesmo gráfico se forem da mesma unidade (ex: subtotal e total). Nunca misture dinheiro com quantidade no mesmo gráfico: faça dois blocos.
+- "grupos": por onde o valor é quebrado. O 1º grupo são as categorias (eixo, fatias). Um 2º grupo, opcional, vira séries com legenda (ex: por mês, separado por situação) — use só quando o usuário pedir uma quebra dessas. Em campo de data, "periodo" é dia, mes, trimestre ou ano; nos outros campos, "".
+- "ordem": valor_desc (maiores primeiro), valor_asc ou rotulo (alfabética). Datas sempre saem em ordem de tempo.
+- "limite": quantas categorias mostrar (ex: 10 num "top 10"). 0 usa o padrão do tipo.
+- "largura": numa grade de 12 colunas: 3 (cartão), 4, 6 (meia tela), 8 ou 12 (tela inteira). Monte linhas que somem 12.
+- "filtros": só deste bloco. "op" igual ou diferente, com os valores exatamente como aparecem nos dados.
+- "titulo": curto e claro, em português, dizendo o que o bloco mostra.
+
+Aparência (cada bloco tem "cor", "icone" e "estilo"; a raiz tem "cor", que vale pros blocos com cor ""):
+- "cor": "" (neutro, ou a cor do painel) ou uma das cores da lista. Pinta o ícone do bloco, o destaque do cartão e o gráfico quando ele tem UMA série só. Gráfico com várias séries e rosca usam sempre a paleta padrão do sistema — isso não muda, porque é o que mantém as séries distinguíveis.
+- "icone": "" (sem ícone) ou um nome da lista, que aparece ao lado do título. Escolha pelo assunto do bloco (ex: "banknotes" pra dinheiro, "shopping-cart" pra pedidos, "cube" pra produtos, "users" pra clientes, "truck" pra entrega, "trophy" pra ranking).
+- "estilo": "simples" (cartão neutro), "suave" (fundo levemente tingido, borda e sombra na cor — é o que atende "sombra colorida") ou "cheio" (fundo inteiro na cor com texto em contraste; só existe em bloco "numero"). "suave" e "cheio" precisam de uma cor (do bloco ou do painel).
+- "curva": só em "linha" e "area": "reta" (ponto a ponto) ou "suave" (curva arredondada, sem os pontos marcados e com um degradê leve embaixo — é o que atende "linha suave", "elegante", "arredondada"). Nos outros tipos, "reta".
+- "rotulos": true escreve o valor em cada barra, ponto ou fatia; false deixa o valor só ao passar o mouse. Use true quando pedirem pra "mostrar os valores/números no gráfico" e evite em séries com muitos pontos (ex: por dia), que ficam poluídas.
+- Sem pedido de aparência, não invente enfeite: "cor" "", "estilo" "simples", "curva" "reta", "rotulos" false, e ícone só nos cartões de número. Quando o usuário pedir visual mais moderno, colorido ou destacado, aí sim use: cores diferentes por cartão, estilo "suave" ou "cheio" nos cartões, ícones em todos os blocos e cor nos gráficos de uma série.
+- Num ajuste só de aparência, mude apenas "cor", "icone", "estilo", "curva" e "rotulos": campos, títulos, filtros e ordem dos blocos ficam iguais.
+- Não existe: espessura da linha, linha tracejada, cor fora da lista (hex, "dourado"), cor por série ou por barra, fonte, tamanho de texto, fundo da página, imagem ou logo. Se pedirem, use o mais próximo e conte em "avisos".
+
+"filtros" na raiz valem pro painel inteiro. Só adicione filtro que o usuário pediu ou que seja óbvio pelo pedido (ex: "só pedidos aprovados"). Não filtre por período: a tela já tem um filtro de período e clicar num gráfico filtra os outros.
+
+Boa montagem, quando o usuário não detalhar: comece com 3 ou 4 cartões de número (largura 3), depois uma evolução no tempo, depois rankings ou participação, e uma tabela de detalhe no fim. Entre 4 e 9 blocos costuma bastar. Não repita a mesma informação em dois blocos.
+
+Ao receber um PAINEL ATUAL junto com um pedido de ajuste, devolva o painel inteiro já ajustado: mantenha como estão os blocos que o usuário não mencionou (mesmos campos, títulos e ordem) e mude só o que foi pedido.
+
+O programa NÃO faz: contas entre medidas (margem, percentual de crescimento, diferença), metas, acumulado, projeção, mapas, e não usa dados fora dos campos listados. Se o usuário pedir algo assim, monte o mais próximo que os blocos permitem e diga em "avisos", numa frase simples cada, o que ficou de fora. Sem ressalvas, "avisos" fica vazio.
+
+"resumo": 1 a 3 frases, em português simples, contando o que você montou (ou mudou).
+"nome_sugerido": um nome curto pro relatório (ex: "Vendas por fábrica").`
+
+function esquemaRelatorio(idsCampos: string[]) {
+  const filtros = {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        campo: { type: 'string', enum: idsCampos },
+        op: { type: 'string', enum: ['igual', 'diferente'] },
+        valores: { type: 'array', items: { type: 'string' } }
+      },
+      required: ['campo', 'op', 'valores'],
+      additionalProperties: false
+    }
+  }
+  return {
+    type: 'object',
+    properties: {
+      nome_sugerido: { type: 'string' },
+      resumo: { type: 'string' },
+      avisos: { type: 'array', items: { type: 'string' } },
+      cor: { type: 'string', enum: ['', ...IDS_CORES] },
+      filtros,
+      blocos: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            tipo: { type: 'string', enum: ['numero', 'colunas', 'barras', 'linha', 'area', 'rosca', 'tabela'] },
+            titulo: { type: 'string' },
+            largura: { type: 'integer', enum: [3, 4, 6, 8, 12] },
+            medidas: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  campo: { type: 'string', enum: idsCampos },
+                  op: { type: 'string', enum: ['soma', 'media', 'minimo', 'maximo', 'contagem'] }
+                },
+                required: ['campo', 'op'],
+                additionalProperties: false
+              }
+            },
+            grupos: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  campo: { type: 'string', enum: idsCampos },
+                  periodo: { type: 'string', enum: ['', 'dia', 'mes', 'trimestre', 'ano'] }
+                },
+                required: ['campo', 'periodo'],
+                additionalProperties: false
+              }
+            },
+            ordem: { type: 'string', enum: ['valor_desc', 'valor_asc', 'rotulo'] },
+            limite: { type: 'integer' },
+            filtros,
+            cor: { type: 'string', enum: ['', ...IDS_CORES] },
+            icone: { type: 'string', enum: ['', ...ICONES_BLOCO] },
+            estilo: { type: 'string', enum: [...ESTILOS_BLOCO] },
+            curva: { type: 'string', enum: ['reta', 'suave'] },
+            rotulos: { type: 'boolean' }
+          },
+          required: ['tipo', 'titulo', 'largura', 'medidas', 'grupos', 'ordem', 'limite', 'filtros', 'cor', 'icone', 'estilo', 'curva', 'rotulos'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['nome_sugerido', 'resumo', 'avisos', 'cor', 'filtros', 'blocos'],
+    additionalProperties: false
+  }
+}
+
+export interface PlantaRelatorioIA {
+  nome_sugerido: string
+  resumo: string
+  avisos: string[]
+  cor: string
+  filtros: unknown[]
+  blocos: unknown[]
+}
+
+/**
+ * Monta (ou ajusta) a planta de um relatório a partir do pedido do usuário. A IA recebe os
+ * campos disponíveis e um resumo dos valores que existem — nunca as linhas — e devolve só a
+ * descrição dos blocos. Quem valida a planta é `normalizarDefinicao`; quem calcula é o navegador.
+ */
+export async function montarRelatorioIA(opts: {
+  idsCampos: string[]
+  /** Campos disponíveis + valores que existem em cada um (ver `resumoParaIA`). */
+  resumoDados: string
+  pedido: string
+  /** JSON da planta atual, quando é um ajuste. */
+  painelAtual?: string
+}): Promise<PlantaRelatorioIA> {
+  const atual = opts.painelAtual ? `\n\nPAINEL ATUAL (JSON):\n${opts.painelAtual}` : ''
+
+  const response = await getClient().beta.messages.create(
+    {
+      model: 'claude-opus-5-5',
+      max_tokens: 16_000,
+      // se o modelo recusar por política, a própria API refaz o pedido num modelo substituto
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      thinking: { type: 'adaptive' },
+      system: SISTEMA_RELATORIO,
+      messages: [
+        {
+          role: 'user',
+          content: `Campos disponíveis e o que existe em cada um:\n${opts.resumoDados}${atual}\n\nPedido do usuário:\n${opts.pedido}`
+        }
+      ],
+      output_config: {
+        effort: 'medium',
+        format: { type: 'json_schema', schema: esquemaRelatorio(opts.idsCampos) }
+      }
+    },
+    { maxRetries: 2, timeout: 120_000 }
+  )
+
+  if (response.stop_reason === 'refusal') throw new Error('A IA recusou montar esse relatório.')
+  if (response.stop_reason === 'max_tokens') throw new Error('O relatório pedido ficou grande demais — peça menos blocos de uma vez.')
+
+  const blocoTexto = response.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
+  if (!blocoTexto) throw new Error('A IA não retornou nada.')
+
+  try {
+    return JSON.parse(blocoTexto.text) as PlantaRelatorioIA
+  } catch {
+    throw new Error('A IA retornou um formato inesperado. Tente novamente.')
+  }
 }

@@ -1,6 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
-import { analisarLayoutPlanilha } from '../../utils/claude'
+import { analisarLayoutPlanilha, mensagemErroIA } from '../../utils/claude'
 import type { SchemaModelo } from '~/types/modelo'
 
 /** A amostra é montada no navegador (utils/layoutPlanilha.ts) e tem tamanho limitado por lá — isso aqui só barra abuso. */
@@ -55,18 +54,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await analisarLayoutPlanilha({ campos, amostra, dicas: schema.dicas?.geral, instrucoes })
   } catch (e) {
-    let mensagem = e instanceof Error ? e.message : 'Falha ao analisar o layout da planilha.'
-    if (e instanceof Anthropic.RateLimitError) mensagem = 'A IA está ocupada agora — tente de novo em instantes.'
-    else if (e instanceof Anthropic.AuthenticationError) mensagem = 'A chave da IA não está configurada no servidor.'
-    else if (e instanceof Anthropic.APIConnectionError) mensagem = 'Não foi possível falar com a IA — confira a conexão do servidor.'
-    else if (e instanceof Anthropic.APIError) {
-      // o motivo vem no corpo da resposta; "erro 400" sozinho não diz nada a quem está na tela
-      const detalhe = (e.error as { error?: { message?: string } } | undefined)?.error?.message ?? e.message
-      // saldo esgotado não tem tipo de erro próprio na API (vem como 400 comum) — só dá pra reconhecer pelo texto
-      mensagem = /credit balance/i.test(detalhe)
-        ? 'Os créditos da conta da Anthropic (a IA) acabaram — é preciso recarregar em console.anthropic.com, em Plans & Billing.'
-        : `A IA devolveu um erro (${e.status ?? 'sem código'}): ${detalhe}`
-    }
-    throw createError({ statusCode: 502, statusMessage: mensagem })
+    throw createError({ statusCode: 502, statusMessage: mensagemErroIA(e, 'Falha ao analisar o layout da planilha.') })
   }
 })
