@@ -8,15 +8,17 @@
   >
     <div class="h-1.5 bg-gradient-to-r from-shift3-dark via-shift3-teal to-shift3-green" />
 
-    <div class="space-y-8 p-6 sm:p-10 print:p-0 print:pt-6">
-      <!-- ───── Cabeçalho: representante + número ───── -->
-      <header class="flex flex-wrap items-start justify-between gap-6">
-        <div class="flex min-w-0 items-center gap-4">
+    <div class="space-y-6 p-4 sm:space-y-8 sm:p-10 print:space-y-8 print:p-0 print:pt-6">
+      <!-- ───── Cabeçalho: representante + número (no celular, um embaixo do outro) ───── -->
+      <header
+        class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6 print:flex-row print:flex-wrap print:items-start print:justify-between print:gap-6"
+      >
+        <div class="flex min-w-0 items-center gap-3 sm:gap-4 print:gap-4">
           <img
             v-if="empresa?.logo_url"
             :src="empresa.logo_url"
             :alt="empresa.nome ?? 'Logomarca'"
-            class="h-16 w-auto max-w-[11rem] shrink-0 object-contain"
+            class="h-12 w-auto max-w-[7rem] shrink-0 object-contain sm:h-16 sm:max-w-[11rem] print:h-16 print:max-w-[11rem]"
           />
           <div
             v-else-if="iniciais"
@@ -26,22 +28,26 @@
           </div>
 
           <div v-if="empresa" class="min-w-0 space-y-0.5">
-            <p class="text-base font-semibold leading-tight text-shift3-text">{{ empresa.nome }}</p>
+            <p class="break-words text-base font-semibold leading-tight text-shift3-text">{{ empresa.nome }}</p>
             <p v-if="empresa.documento_legal" class="text-xs text-shift3-text-secondary">
               {{ rotuloDocumento(empresa.documento_legal) }} {{ formatarDocumento(empresa.documento_legal) }}
             </p>
             <p v-for="linha in formatarEndereco(empresa.endereco)" :key="linha" class="text-xs text-shift3-text-secondary">
               {{ linha }}
             </p>
-            <p v-if="contatoEmpresa" class="text-xs text-shift3-text-secondary">{{ contatoEmpresa }}</p>
+            <p v-if="contatoEmpresa" class="break-words text-xs text-shift3-text-secondary">{{ contatoEmpresa }}</p>
           </div>
         </div>
 
-        <div class="ml-auto text-right">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-shift3-teal">Ordem de Compra</p>
-          <p class="mt-1 text-2xl font-bold leading-none tracking-tight text-shift3-text">{{ pedido.numero }}</p>
+        <div
+          class="flex items-end justify-between gap-3 border-t border-shift3-border pt-4 sm:ml-auto sm:block sm:border-0 sm:pt-0 sm:text-right print:ml-auto print:block print:border-0 print:pt-0 print:text-right"
+        >
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-shift3-teal">Ordem de Compra</p>
+            <p class="mt-1 break-words text-2xl font-bold leading-none tracking-tight text-shift3-text">{{ pedido.numero }}</p>
+          </div>
           <span
-            class="mt-3 inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-medium"
+            class="inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-medium sm:mt-3 print:mt-3"
             :class="situacao.classe"
           >
             <span class="h-1.5 w-1.5 rounded-full" :class="situacao.bolinha" />
@@ -52,10 +58,10 @@
 
       <!-- ───── Cliente + condições ───── -->
       <section class="grid grid-cols-1 gap-4 sm:grid-cols-5 print:grid-cols-5">
-        <div class="rounded-medium border border-shift3-border p-4 sm:col-span-3 print:col-span-3">
+        <div class="min-w-0 rounded-medium border border-shift3-border p-4 sm:col-span-3 print:col-span-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-shift3-text-muted">Cliente</p>
-          <p class="mt-2 text-base font-semibold leading-tight text-shift3-text">{{ nomeCliente }}</p>
-          <div class="mt-1 space-y-0.5 text-xs text-shift3-text-secondary">
+          <p class="mt-2 break-words text-base font-semibold leading-tight text-shift3-text">{{ nomeCliente }}</p>
+          <div class="mt-1 space-y-0.5 break-words text-xs text-shift3-text-secondary">
             <p v-if="cliente?.documento || cliente?.inscricao_estadual">
               <template v-if="cliente?.documento">
                 {{ rotuloDocumento(cliente.documento) }} {{ formatarDocumento(cliente.documento) }}
@@ -91,7 +97,33 @@
       </section>
 
       <!-- ───── Itens ───── -->
-      <section class="overflow-x-auto">
+      <!-- Celular: um cartão por item, sem rolagem lateral. O PDF sempre usa a tabela. -->
+      <section class="sm:hidden print:hidden">
+        <p class="border-b-2 border-shift3-dark pb-2 text-[11px] font-semibold uppercase tracking-wide text-shift3-text-muted">
+          Itens
+        </p>
+        <ul class="tabular-nums">
+          <li v-for="(item, i) in itens" :key="item.id" class="flex gap-3 border-b border-shift3-border py-3">
+            <span class="w-5 shrink-0 pt-0.5 text-xs text-shift3-text-muted">{{ i + 1 }}</span>
+            <div class="min-w-0 flex-1">
+              <p class="break-words text-sm font-medium text-shift3-text">
+                {{ item.descricao || item.descricao_original || '—' }}
+              </p>
+              <p v-if="item.sku" class="mt-0.5 break-words text-xs text-shift3-text-secondary">Cód. {{ item.sku }}</p>
+              <div class="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <span class="text-xs text-shift3-text-secondary">
+                  {{ formatQtd(item.quantidade) }} × {{ formatValor(item.preco_unitario) }}
+                </span>
+                <span class="ml-auto text-sm font-semibold text-shift3-text">
+                  {{ formatValor(item.quantidade * item.preco_unitario) }}
+                </span>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="hidden overflow-x-auto sm:block print:block">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b-2 border-shift3-dark text-[11px] uppercase tracking-wide text-shift3-text-muted">

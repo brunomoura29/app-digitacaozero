@@ -1,6 +1,6 @@
 <template>
   <div class="flex min-h-screen flex-col bg-shift3-bg-light print:block print:min-h-0 print:bg-transparent">
-    <div class="mx-auto w-full max-w-[210mm] flex-1 px-4 py-6 sm:py-10 print:max-w-none print:p-0">
+    <div class="mx-auto w-full max-w-[210mm] flex-1 px-3 py-4 sm:px-4 sm:py-10 print:max-w-none print:p-0">
       <div v-if="pending" class="flex items-center justify-center gap-2 py-14 text-sm text-shift3-text-muted">
         <BaseSpinner size="md" /> Carregando…
       </div>
@@ -22,17 +22,37 @@
     <!-- Barra de ações — fixa no rodapé da tela, fora do PDF -->
     <div
       v-if="pedido"
-      class="sticky bottom-0 border-t border-shift3-border bg-shift3-bg-card/95 px-4 py-3 backdrop-blur print:hidden"
+      class="sticky bottom-0 border-t border-shift3-border bg-shift3-bg-card/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-4 print:hidden"
     >
-      <div class="mx-auto flex max-w-[210mm] flex-wrap items-center gap-2">
-        <BaseButton variant="secondary" icon-left="heroicons:arrow-down-tray" @click="baixarPdf">Baixar PDF</BaseButton>
+      <!-- No celular os três botões cabem numa linha só: rótulos curtos e o Aprovar ocupa o que sobra -->
+      <div class="mx-auto flex max-w-[210mm] items-center gap-2">
+        <BaseButton
+          variant="secondary"
+          icon-left="heroicons:arrow-down-tray"
+          class="shrink-0 whitespace-nowrap"
+          aria-label="Baixar PDF"
+          @click="baixarPdf"
+        >
+          <span class="hidden sm:inline">Baixar </span>PDF
+        </BaseButton>
 
         <template v-if="pedido.status === 'em_aprovacao'">
-          <BaseButton variant="ghost" class="ml-auto text-danger" :disabled="processando" @click="abrirModal('rejeitar')">
+          <BaseButton
+            variant="ghost"
+            class="ml-auto shrink-0 whitespace-nowrap text-danger"
+            :disabled="processando"
+            @click="abrirModal('rejeitar')"
+          >
             Rejeitar
           </BaseButton>
-          <BaseButton variant="accent" icon-left="heroicons:check" :loading="processando" @click="abrirModal('aprovar')">
-            Aprovar pedido
+          <BaseButton
+            variant="accent"
+            icon-left="heroicons:check"
+            class="flex-1 whitespace-nowrap sm:flex-none"
+            :loading="processando"
+            @click="abrirModal('aprovar')"
+          >
+            Aprovar<span class="hidden sm:inline"> pedido</span>
           </BaseButton>
         </template>
       </div>
