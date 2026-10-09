@@ -49,21 +49,90 @@
             <div>
               <label>{{ form.tipo === 'tabela' ? 'Colunas de valor' : 'O que calcular' }}</label>
               <div class="mt-1.5 space-y-2">
-                <div v-for="(m, i) in form.medidas" :key="i" class="flex items-center gap-2">
-                  <select v-model="m.op" :class="[SELECT, 'w-32 shrink-0']" @change="ajustarMedida(m)">
-                    <option v-for="op in OPERACOES" :key="op" :value="op">{{ NOME_OPERACAO[op] }}</option>
-                  </select>
-                  <span class="text-xs text-shift3-text-muted">de</span>
-                  <select v-model="m.campo" :class="[SELECT, 'min-w-0 flex-1']" @change="ajustarMedida(m)">
-                    <option v-for="c in camposPara(m.op)" :key="c.id" :value="c.id">{{ c.nome }}</option>
-                  </select>
-                  <button v-if="form.medidas.length > minMedidas" type="button" :class="BOTAO_TIRAR" aria-label="Tirar" @click="form.medidas.splice(i, 1)">
-                    <Icon name="heroicons:x-mark" class="h-4 w-4" />
+                <template v-for="(m, i) in form.medidas" :key="i">
+                  <!-- valor calculado: uma conta entre vários valores (A, B, C…) -->
+                  <div v-if="m.partes" class="rounded-default border border-shift3-border p-2.5">
+                    <div class="flex items-center gap-2">
+                      <Icon name="heroicons:calculator" class="h-4 w-4 shrink-0 text-shift3-text-secondary" />
+                      <input v-model="m.nome" type="text" maxlength="60" placeholder="Nome (ex: Margem)" aria-label="Nome do valor calculado" :class="[SELECT, 'min-w-0 flex-1']" />
+                      <select v-model="m.formato" :class="[SELECT, 'w-32 shrink-0']" aria-label="Formato">
+                        <option value="moeda">R$</option>
+                        <option value="numero">Número</option>
+                        <option value="percentual">%</option>
+                      </select>
+                      <button v-if="form.medidas.length > minMedidas" type="button" :class="BOTAO_TIRAR" aria-label="Tirar" @click="form.medidas.splice(i, 1)">
+                        <Icon name="heroicons:x-mark" class="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div class="mt-2 space-y-2">
+                      <div v-for="(p, j) in m.partes" :key="j" class="flex items-center gap-2">
+                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-default bg-shift3-green/20 text-sm font-bold text-shift3-text">
+                          {{ LETRAS_PARTES[j] }}
+                        </span>
+                        <select v-model="p.op" :class="[SELECT, 'w-28 shrink-0']" @change="ajustarMedida(p)">
+                          <option v-for="op in OPERACOES" :key="op" :value="op">{{ NOME_OPERACAO[op] }}</option>
+                        </select>
+                        <select v-model="p.campo" :class="[SELECT, 'min-w-0 flex-1']" @change="ajustarMedida(p)">
+                          <option v-for="c in camposPara(p.op)" :key="c.id" :value="c.id">{{ c.nome }}</option>
+                        </select>
+                        <!-- só a última sai: tirar uma do meio trocaria as letras da fórmula -->
+                        <button
+                          v-if="m.partes.length > 1 && j === m.partes.length - 1"
+                          type="button"
+                          :class="BOTAO_TIRAR"
+                          aria-label="Tirar"
+                          @click="m.partes.pop()"
+                        >
+                          <Icon name="heroicons:x-mark" class="h-4 w-4" />
+                        </button>
+                      </div>
+                      <button v-if="m.partes.length < MAX_PARTES" type="button" :class="BOTAO_MAIS" @click="adicionarParte(m)">
+                        <Icon name="heroicons:plus" class="h-3.5 w-3.5" /> Adicionar valor {{ LETRAS_PARTES[m.partes.length] }}
+                      </button>
+                    </div>
+
+                    <div class="mt-2.5 flex items-center gap-2">
+                      <span class="shrink-0 text-xs font-semibold text-shift3-text-secondary">Conta</span>
+                      <input
+                        v-model="m.formula"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Ex: A - B"
+                        aria-label="Fórmula"
+                        :class="[SELECT, 'min-w-0 flex-1 font-mono', formulaValida(m) ? '' : 'border-danger']"
+                      />
+                    </div>
+                    <p class="mt-1 text-xs" :class="formulaValida(m) ? 'text-shift3-text-muted' : 'text-danger'">
+                      {{
+                        formulaValida(m)
+                          ? 'Use as letras com + - * / e parênteses. Ex: A - B · A + B + C · (A - B) / A para percentual.'
+                          : 'Não consegui ler essa conta. Use só as letras acima, números, + - * / e parênteses.'
+                      }}
+                    </p>
+                  </div>
+
+                  <div v-else class="flex items-center gap-2">
+                    <select v-model="m.op" :class="[SELECT, 'w-32 shrink-0']" @change="ajustarMedida(m)">
+                      <option v-for="op in OPERACOES" :key="op" :value="op">{{ NOME_OPERACAO[op] }}</option>
+                    </select>
+                    <span class="text-xs text-shift3-text-muted">de</span>
+                    <select v-model="m.campo" :class="[SELECT, 'min-w-0 flex-1']" @change="ajustarMedida(m)">
+                      <option v-for="c in camposPara(m.op)" :key="c.id" :value="c.id">{{ c.nome }}</option>
+                    </select>
+                    <button v-if="form.medidas.length > minMedidas" type="button" :class="BOTAO_TIRAR" aria-label="Tirar" @click="form.medidas.splice(i, 1)">
+                      <Icon name="heroicons:x-mark" class="h-4 w-4" />
+                    </button>
+                  </div>
+                </template>
+                <div v-if="form.medidas.length < maxMedidas" class="flex flex-wrap gap-x-4 gap-y-1">
+                  <button type="button" :class="BOTAO_MAIS" @click="adicionarMedida">
+                    <Icon name="heroicons:plus" class="h-3.5 w-3.5" /> Adicionar valor
+                  </button>
+                  <button type="button" :class="BOTAO_MAIS" title="Uma conta entre valores: margem, soma de várias colunas, percentual" @click="adicionarCalculo">
+                    <Icon name="heroicons:calculator" class="h-3.5 w-3.5" /> Adicionar conta (fórmula)
                   </button>
                 </div>
-                <button v-if="form.medidas.length < maxMedidas" type="button" :class="BOTAO_MAIS" @click="adicionarMedida">
-                  <Icon name="heroicons:plus" class="h-3.5 w-3.5" /> Adicionar valor
-                </button>
               </div>
             </div>
 
@@ -151,7 +220,9 @@
                     >
                       {{ v }}
                     </button>
-                    <span v-if="!valoresDe(f.campo).length" class="text-xs text-shift3-text-muted">Esse campo ainda não tem dados.</span>
+                    <span v-if="!valoresDe(f.campo).length" class="text-xs text-shift3-text-muted">
+                      {{ importacao && !(f.campo in valoresBuscados) ? 'Buscando os valores…' : 'Esse campo ainda não tem dados.' }}
+                    </span>
                   </div>
                 </div>
                 <button type="button" :class="BOTAO_MAIS" @click="adicionarFiltro">
@@ -262,8 +333,11 @@ import { computed, reactive, ref } from 'vue'
 import {
   camposDasFontes,
   campoRelatorio,
+  compilarFormula,
   CORES_BLOCO,
   ICONES_BLOCO,
+  LETRAS_PARTES,
+  MAX_PARTES,
   NOME_OPERACAO,
   normalizarDefinicao,
   novoIdBloco,
@@ -275,10 +349,12 @@ import {
   type EstiloBloco,
   type FiltroRelatorio,
   type FonteId,
+  type FonteImportacao,
   type GrupoBloco,
   type MedidaBloco,
   type Operacao,
   type OrdemBloco,
+  type ParteMedida,
   type TipoBloco
 } from '#shared/utils/relatorios'
 
@@ -286,6 +362,8 @@ const props = defineProps<{
   /** `null` = bloco novo. */
   bloco: BlocoRelatorio | null
   fontes: FonteId[]
+  /** Relatório de importação: o conjunto e os arquivos — é de onde saem os campos. */
+  importacao?: FonteImportacao | null
   /** Linhas carregadas — só pra sugerir os valores dos filtros. */
   dados: DadosRelatorio
 }>()
@@ -326,17 +404,31 @@ const LARGURAS_NOME = [
 ]
 
 const novo = computed(() => !props.bloco)
-const campos = computed(() => camposDasFontes(props.fontes))
+const campos = computed(() => camposDasFontes(props.fontes, props.importacao))
 const camposNumericos = computed(() => campos.value.filter((c) => c.tipo === 'numero' || c.tipo === 'moeda'))
 const camposTexto = computed(() => campos.value.filter((c) => c.tipo === 'texto'))
+
+/** Bloco novo começa com "soma do primeiro valor, por mês" — os campos dependem da fonte. */
+function medidaPadrao(): MedidaBloco {
+  if (!props.importacao) return { campo: 'pedido.total', op: 'soma' }
+  const numerico = camposNumericos.value[0]
+  return numerico ? { campo: numerico.id, op: 'soma' } : { campo: campos.value[0]?.id ?? '', op: 'contagem' }
+}
+function grupoPadrao(): GrupoBloco {
+  if (!props.importacao) return { campo: 'pedido.emissao', periodo: 'mes' }
+  return { campo: campos.value.find((c) => c.tipo === 'data')?.id ?? campos.value[0]?.id ?? '', periodo: 'mes' }
+}
 
 const inicial = props.bloco
 const form = reactive({
   tipo: (inicial?.tipo ?? 'colunas') as TipoBloco,
   titulo: inicial?.titulo ?? '',
   largura: inicial?.largura ?? 6,
-  medidas: (inicial?.medidas.map((m) => ({ ...m })) ?? [{ campo: 'pedido.total', op: 'soma' }]) as MedidaBloco[],
-  grupos: (inicial?.grupos.map((g) => ({ ...g })) ?? [{ campo: 'pedido.emissao', periodo: 'mes' }]) as GrupoBloco[],
+  // cópia funda: as partes de um valor calculado são editadas aqui sem mexer no bloco original
+  medidas: (inicial?.medidas.map((m) => ({ ...m, ...(m.partes ? { partes: m.partes.map((p) => ({ ...p })) } : {}) })) ?? [
+    medidaPadrao()
+  ]) as MedidaBloco[],
+  grupos: (inicial?.grupos.map((g) => ({ ...g })) ?? [grupoPadrao()]) as GrupoBloco[],
   ordem: (inicial?.ordem ?? 'valor_desc') as OrdemBloco,
   limite: (inicial?.limite ? String(inicial.limite) : '') as string | number,
   filtros: (inicial?.filtros.map((f) => ({ ...f, valores: [...f.valores] })) ?? []) as FiltroRelatorio[],
@@ -373,8 +465,37 @@ function ehData(campoId: string) {
 }
 
 /** Soma/média só valem em campo numérico: trocar a conta pode exigir trocar o campo. */
-function ajustarMedida(m: MedidaBloco) {
+function ajustarMedida(m: ParteMedida) {
   if (!camposPara(m.op).some((c) => c.id === m.campo)) m.campo = camposPara(m.op)[0]?.id ?? m.campo
+}
+
+// ── valor calculado (conta entre valores) ──
+
+/** Próximo valor de uma conta: de preferência um campo numérico que ela ainda não usa. */
+function parteNova(usadas: ParteMedida[]): ParteMedida {
+  const livre = camposNumericos.value.find((c) => !usadas.some((p) => p.campo === c.id)) ?? camposNumericos.value[0]
+  return livre ? { campo: livre.id, op: 'soma' } : { campo: campos.value[0]?.id ?? '', op: 'contagem' }
+}
+
+function adicionarCalculo() {
+  const a = parteNova([])
+  const b = parteNova([a])
+  form.medidas.push({
+    ...a,
+    formula: 'A - B',
+    partes: [a, b],
+    nome: '',
+    formato: campoRelatorio(a.campo)?.tipo === 'moeda' ? 'moeda' : 'numero'
+  })
+}
+
+function adicionarParte(m: MedidaBloco) {
+  m.partes!.push(parteNova(m.partes!))
+}
+
+function formulaValida(m: MedidaBloco): boolean {
+  const formula = m.formula?.trim() ?? ''
+  return !!formula && !!compilarFormula(formula, m.partes?.length ?? 0)
 }
 
 function ajustarGrupo(g: GrupoBloco) {
@@ -382,7 +503,8 @@ function ajustarGrupo(g: GrupoBloco) {
 }
 
 function adicionarMedida() {
-  form.medidas.push({ campo: camposNumericos.value[0]?.id ?? 'pedido.total', op: 'soma' })
+  const numerico = camposNumericos.value[0]
+  form.medidas.push(numerico ? { campo: numerico.id, op: 'soma' } : medidaPadrao())
 }
 
 function adicionarGrupo() {
@@ -395,6 +517,19 @@ function adicionarFiltro() {
   form.filtros.push({ campo: camposTexto.value[0]?.id ?? 'pedido.situacao', op: 'igual', valores: [] })
 }
 
+// Importação: as linhas ficam no banco, então os valores de cada campo são buscados na hora
+const { buscarValoresImportacao } = useRelatorios()
+const valoresBuscados = reactive<Record<string, string[]>>({})
+const buscasFeitas = new Set<string>()
+
+function buscarValores(campoId: string) {
+  if (!props.importacao || buscasFeitas.has(campoId)) return
+  buscasFeitas.add(campoId)
+  buscarValoresImportacao(props.importacao, campoId)
+    .then((valores) => (valoresBuscados[campoId] = valores))
+    .catch(() => buscasFeitas.delete(campoId))
+}
+
 function alternarValor(f: FiltroRelatorio, v: string) {
   f.valores = f.valores.includes(v) ? f.valores.filter((x) => x !== v) : [...f.valores, v]
 }
@@ -403,12 +538,17 @@ function alternarValor(f: FiltroRelatorio, v: string) {
 function valoresDe(campoId: string): string[] {
   const campo = campoRelatorio(campoId)
   if (!campo) return []
-  const linhas = campo.base === 'item' ? props.dados.itens : props.dados.pedidos
   const vistos = new Set<string>()
-  for (const l of linhas) {
-    const v = l[campoId]
-    if (v != null && v !== '') vistos.add(String(v))
-    if (vistos.size >= 40) break
+  if (campo.base === 'linha') {
+    buscarValores(campoId)
+    for (const v of valoresBuscados[campoId] ?? []) vistos.add(v)
+  } else {
+    const linhas = campo.base === 'item' ? props.dados.itens : props.dados.pedidos
+    for (const l of linhas) {
+      const v = l[campoId]
+      if (v != null && v !== '') vistos.add(String(v))
+      if (vistos.size >= 40) break
+    }
   }
   for (const f of form.filtros) if (f.campo === campoId) f.valores.forEach((v) => vistos.add(v))
   return [...vistos].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }))
@@ -416,6 +556,10 @@ function valoresDe(campoId: string): string[] {
 
 function salvar() {
   erro.value = ''
+  if (form.medidas.some((m) => m.partes && !formulaValida(m))) {
+    erro.value = 'Confira a conta do valor calculado: ela está vazia ou com algum símbolo que não dá pra ler.'
+    return
+  }
   // a mesma checagem que vale pra planta da IA diz se o bloco tem o mínimo pra existir
   const [valido] = normalizarDefinicao(
     {
@@ -438,7 +582,8 @@ function salvar() {
         }
       ]
     },
-    props.fontes
+    props.fontes,
+    props.importacao
   ).blocos
   if (!valido) {
     erro.value =

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AnaliseLayout, CampoSchema, SchemaModelo, TipoCampo } from '~/types/modelo'
-import { ESTILOS_BLOCO, ICONES_BLOCO, IDS_CORES } from '#shared/utils/relatorios'
+import { ESTILOS_BLOCO, FORMATOS_CALCULO, ICONES_BLOCO, IDS_CORES, LETRAS_PARTES, MAX_PARTES } from '#shared/utils/relatorios'
 
 let clienteAnthropic: Anthropic | null = null
 
@@ -480,6 +480,7 @@ Blocos (em "blocos", na ordem em que aparecem na tela, da esquerda pra direita e
 
 Em cada bloco:
 - "medidas": o que é calculado. "op" pode ser soma, media, minimo, maximo (só em campo de número ou moeda) ou contagem, que conta valores DIFERENTES do campo (contagem de "pedido.numero" = quantidade de pedidos; contagem de "cliente.nome" = quantos clientes). Ticket médio = media de "pedido.total". Gráficos usam uma medida; só coloque duas ou mais no mesmo gráfico se forem da mesma unidade (ex: subtotal e total). Nunca misture dinheiro com quantidade no mesmo gráfico: faça dois blocos.
+- Valor calculado (conta entre valores): quando o usuário pedir margem, diferença, soma de várias colunas num número só, percentual ou participação, a medida leva "formula" + "partes". Cada parte é um campo com a sua operação; na fórmula, A é a 1ª parte, B a 2ª, e assim por diante (até ${MAX_PARTES}, letras A a ${LETRAS_PARTES[MAX_PARTES - 1]}), com + - * / , parênteses e números. Exemplos: margem = partes [soma de vendas, soma de custo], formula "A - B", formato "moeda"; custo total = três partes de soma, formula "A + B + C"; margem % = formula "(A - B) / A", formato "percentual" (o programa já mostra 0,25 como 25% — não multiplique por 100). O programa calcula cada parte sobre as linhas do grupo e só então faz a conta, então um percentual sai certo por mês, por cliente ou no total. "nome" é o rótulo que aparece (ex: "Margem"); "formato" é moeda, numero ou percentual; "campo" e "op" repetem a 1ª parte. Numa medida comum: "formula" "", "partes" [], "nome" "", "formato" "". Use fórmula só quando a conta for entre valores — pra somar uma coluna só, a medida comum basta.
 - "grupos": por onde o valor é quebrado. O 1º grupo são as categorias (eixo, fatias). Um 2º grupo, opcional, vira séries com legenda (ex: por mês, separado por situação) — use só quando o usuário pedir uma quebra dessas. Em campo de data, "periodo" é dia, mes, trimestre ou ano; nos outros campos, "".
 - "ordem": valor_desc (maiores primeiro), valor_asc ou rotulo (alfabética). Datas sempre saem em ordem de tempo.
 - "limite": quantas categorias mostrar (ex: 10 num "top 10"). 0 usa o padrão do tipo.
@@ -503,12 +504,44 @@ Boa montagem, quando o usuário não detalhar: comece com 3 ou 4 cartões de nú
 
 Ao receber um PAINEL ATUAL junto com um pedido de ajuste, devolva o painel inteiro já ajustado: mantenha como estão os blocos que o usuário não mencionou (mesmos campos, títulos e ordem) e mude só o que foi pedido.
 
-O programa NÃO faz: contas entre medidas (margem, percentual de crescimento, diferença), metas, acumulado, projeção, mapas, e não usa dados fora dos campos listados. Se o usuário pedir algo assim, monte o mais próximo que os blocos permitem e diga em "avisos", numa frase simples cada, o que ficou de fora. Sem ressalvas, "avisos" fica vazio.
+O programa NÃO faz: comparação com outro período dentro da fórmula (crescimento sobre o mês anterior, variação ano contra ano — o cartão de número já mostra sozinho a variação contra o período anterior quando há filtro de período), participação de cada categoria sobre o total geral (use rosca), conta linha a linha antes de somar (ex: quantidade × preço de cada linha), condição dentro da fórmula ("se… então"), metas, acumulado, projeção, mapas, e não usa dados fora dos campos listados. Se o usuário pedir algo assim, monte o mais próximo que os blocos permitem e diga em "avisos", numa frase simples cada, o que ficou de fora. Sem ressalvas, "avisos" fica vazio.
 
 "resumo": 1 a 3 frases, em português simples, contando o que você montou (ou mudou).
 "nome_sugerido": um nome curto pro relatório (ex: "Vendas por fábrica").`
 
+/**
+ * Relatório sobre arquivos importados: troca só o trecho que explica como os dados se
+ * organizam — blocos, aparência e limites são os mesmos dos relatórios de pedidos.
+ */
+const ORGANIZACAO_IMPORTACAO = `Como os dados se organizam:
+- Os dados são as linhas dos arquivos que o usuário importou de um conjunto de dados (ex: balancete, razão, extrato). Há um único conjunto de linhas: uma linha por linha de arquivo. Não existem pedidos, itens nem cadastros aqui — esqueça os exemplos com "pedido.*" e use só os ids listados na mensagem.
+- Cada arquivo é de um cliente e de um período (mês ou ano). O campo "Período" é a data de referência do arquivo: é ele que serve pra evolução no tempo (com "periodo" mes, trimestre ou ano; nunca dia) e é nele que o filtro de período da tela atua. "Cliente", "Arquivo" e "Aba da planilha" também existem em toda linha.
+- Os outros campos são as colunas do conjunto, com os nomes que o usuário deu. Campos marcados "(do arquivo)" valem pro arquivo inteiro e só servem pra separar ou filtrar.
+- "contagem" conta valores DIFERENTES do campo (ex: contagem de uma coluna de conta = quantas contas).
+- Cuidado com saldo: coluna de saldo (saldo anterior, saldo atual, saldo final) é uma fotografia do período, não um movimento. Somar saldo de vários períodos dá um número sem sentido — mostre saldo sempre separado por "Período" (evolução ou tabela) e, num cartão de número, avise em "avisos" que o valor soma todos os períodos carregados e que o usuário deve escolher um período no filtro da tela. Colunas de movimento (débito, crédito, valor do lançamento) podem ser somadas normalmente.
+- Planilhas contábeis costumam trazer linhas de totais e de grupos junto com as linhas de detalhe (contas sintéticas e analíticas). Se o resumo dos dados mostrar um campo que distingue isso (tipo da conta, nível, grupo), use filtro pra não somar a mesma coisa duas vezes; se não der pra distinguir, avise em "avisos".
+- Quem abre o link público é um cliente e vê só os arquivos dele; o administrador vê todos.`
+
+function sistemaRelatorio(origem: 'pedidos' | 'importacao'): string {
+  if (origem === 'pedidos') return SISTEMA_RELATORIO
+  const inicio = SISTEMA_RELATORIO.indexOf('Como os dados se organizam:')
+  const fim = SISTEMA_RELATORIO.indexOf('Blocos (em "blocos"')
+  return (
+    SISTEMA_RELATORIO.slice(0, inicio).replace(
+      'para um sistema de ordens de compra de um representante comercial',
+      'sobre arquivos de dados importados (planilhas contábeis e financeiras, como balancetes)'
+    ) +
+    ORGANIZACAO_IMPORTACAO +
+    '\n\n' +
+    SISTEMA_RELATORIO.slice(fim)
+  )
+}
+
 function esquemaRelatorio(idsCampos: string[]) {
+  const parteMedida = {
+    campo: { type: 'string', enum: idsCampos },
+    op: { type: 'string', enum: ['soma', 'media', 'minimo', 'maximo', 'contagem'] }
+  }
   const filtros = {
     type: 'array',
     items: {
@@ -543,10 +576,17 @@ function esquemaRelatorio(idsCampos: string[]) {
               items: {
                 type: 'object',
                 properties: {
-                  campo: { type: 'string', enum: idsCampos },
-                  op: { type: 'string', enum: ['soma', 'media', 'minimo', 'maximo', 'contagem'] }
+                  ...parteMedida,
+                  // valor calculado — numa medida comum: formula "", partes [], nome "", formato ""
+                  formula: { type: 'string' },
+                  partes: {
+                    type: 'array',
+                    items: { type: 'object', properties: parteMedida, required: ['campo', 'op'], additionalProperties: false }
+                  },
+                  nome: { type: 'string' },
+                  formato: { type: 'string', enum: ['', ...FORMATOS_CALCULO] }
                 },
-                required: ['campo', 'op'],
+                required: ['campo', 'op', 'formula', 'partes', 'nome', 'formato'],
                 additionalProperties: false
               }
             },
@@ -596,6 +636,8 @@ export interface PlantaRelatorioIA {
  * descrição dos blocos. Quem valida a planta é `normalizarDefinicao`; quem calcula é o navegador.
  */
 export async function montarRelatorioIA(opts: {
+  /** De onde vêm os dados: muda a explicação de como eles se organizam. */
+  origem?: 'pedidos' | 'importacao'
   idsCampos: string[]
   /** Campos disponíveis + valores que existem em cada um (ver `resumoParaIA`). */
   resumoDados: string
@@ -613,7 +655,7 @@ export async function montarRelatorioIA(opts: {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
-      system: SISTEMA_RELATORIO,
+      system: sistemaRelatorio(opts.origem ?? 'pedidos'),
       messages: [
         {
           role: 'user',

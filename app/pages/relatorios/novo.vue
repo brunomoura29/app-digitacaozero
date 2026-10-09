@@ -7,6 +7,7 @@
       <p class="text-base font-semibold text-shift3-text">1. Fontes de dados</p>
       <p class="mt-0.5 text-sm text-shift3-text-secondary">
         Marque tudo o que pode ser útil. Os cadastros já entram ligados a cada pedido — não precisa relacionar nada.
+        Importações fica num relatório só dela.
       </p>
 
       <div class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -32,11 +33,16 @@
             <span class="flex items-center gap-1.5 text-sm font-semibold text-shift3-text">
               <Icon :name="f.icone" class="h-4 w-4 text-shift3-text-secondary" />
               {{ f.nome }}
-              <span v-if="f.obrigatoria" class="text-xs font-normal text-shift3-text-muted">(sempre)</span>
+              <span v-if="f.obrigatoria && !deImportacao" class="text-xs font-normal text-shift3-text-muted">(sempre)</span>
             </span>
             <span class="mt-0.5 block text-xs text-shift3-text-secondary">{{ f.descricao }}</span>
           </span>
         </button>
+      </div>
+
+      <!-- Importações: qual conjunto de dados e quais arquivos -->
+      <div v-if="deImportacao" class="mt-4 border-t border-shift3-border pt-4">
+        <RelatoriosArquivosImportacao v-model="importacao" />
       </div>
     </section>
 
@@ -52,13 +58,17 @@
         class="mt-4"
         :rows="5"
         :maxlength="2000"
-        placeholder="Ex: quero acompanhar quanto foi vendido por mês, ver as fábricas e os 10 produtos que mais vendem, e uma tabela com os pedidos aprovados."
+        :placeholder="
+          deImportacao
+            ? 'Ex: quero ver o total de débitos e créditos por mês, as 10 contas com maior movimento e uma tabela com conta, débito, crédito e saldo.'
+            : 'Ex: quero acompanhar quanto foi vendido por mês, ver as fábricas e os 10 produtos que mais vendem, e uma tabela com os pedidos aprovados.'
+        "
         :disabled="montando"
       />
 
       <div class="mt-3 flex flex-wrap gap-2">
         <button
-          v-for="s in SUGESTOES"
+          v-for="s in sugestoes"
           :key="s.titulo"
           type="button"
           class="rounded-pill border border-shift3-border px-3 py-1 text-xs text-shift3-text-secondary transition hover:border-shift3-green hover:text-shift3-text"
@@ -75,8 +85,17 @@
       </div>
 
       <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
-        <BaseButton variant="ghost" :disabled="montando" @click="criarEmBranco">Começar em branco</BaseButton>
-        <BaseButton variant="accent" icon-left="heroicons:sparkles" :loading="montando" :disabled="!pedido.trim()" @click="montar">
+        <span v-if="faltaImportacao" class="mr-auto text-xs text-shift3-text-secondary">
+          Escolha acima o conjunto de dados e os arquivos.
+        </span>
+        <BaseButton variant="ghost" :disabled="montando || faltaImportacao" @click="criarEmBranco">Começar em branco</BaseButton>
+        <BaseButton
+          variant="accent"
+          icon-left="heroicons:sparkles"
+          :loading="montando"
+          :disabled="!pedido.trim() || faltaImportacao"
+          @click="montar"
+        >
           Montar com IA
         </BaseButton>
       </div>
@@ -85,8 +104,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { definicaoVazia, FONTES_RELATORIO, normalizarFontes, type FonteId } from '#shared/utils/relatorios'
+import { computed, ref } from 'vue'
+import { definicaoVazia, FONTES_RELATORIO, normalizarFontes, type FonteId, type FonteImportacao } from '#shared/utils/relatorios'
 
 definePageMeta({ layout: 'dashboard', title: 'Novo relatório', backTo: '/relatorios' })
 
@@ -117,13 +136,45 @@ const toast = useToast()
 /** Resumo/avisos da IA, pro editor mostrar logo depois de abrir o relatório recém-criado. */
 const recado = useState<{ id: string; resumo: string; avisos: string[] } | null>('relatorios:recado', () => null)
 
-const marcadas = ref<FonteId[]>(['pedidos', 'itens', 'clientes', 'produtos'])
+// os arquivos importados têm colunas próprias de cada conjunto — as sugestões só falam do que todo arquivo tem
+const SUGESTOES_IMPORTACAO = [
+  {
+    titulo: 'Visão geral',
+    texto:
+      'Visão geral destes dados: os principais totais em destaque, a evolução por período, os maiores valores em ranking e uma tabela de detalhe no fim.'
+  },
+  {
+    titulo: 'Evolução por período',
+    texto: 'Quero acompanhar a evolução dos valores por período, mês a mês, e comparar os períodos numa tabela.'
+  },
+  {
+    titulo: 'Maiores valores',
+    texto: 'Mostre um ranking com os 10 maiores valores, a participação de cada grupo no total e uma tabela com o detalhe.'
+  }
+]
+
+const PADRAO_PEDIDOS: FonteId[] = ['pedidos', 'itens', 'clientes', 'produtos']
+const marcadas = ref<FonteId[]>(PADRAO_PEDIDOS)
+const importacao = ref<FonteImportacao | null>(null)
 const pedido = ref('')
 const montando = ref(false)
 
+const deImportacao = computed(() => marcadas.value.includes('importacao'))
+const faltaImportacao = computed(() => deImportacao.value && !importacao.value)
+const sugestoes = computed(() => (deImportacao.value ? SUGESTOES_IMPORTACAO : SUGESTOES))
+
 function alternarFonte(id: FonteId) {
   const fonte = FONTES_RELATORIO.find((f) => f.id === id)!
-  if (fonte.obrigatoria) return
+  if (fonte.obrigatoria && !deImportacao.value) return
+  // Importações não se mistura: marcar ela tira as de pedidos, e marcar uma de pedidos tira ela
+  if (fonte.exclusiva) {
+    marcadas.value = deImportacao.value ? PADRAO_PEDIDOS : [id]
+    return
+  }
+  if (deImportacao.value) {
+    marcadas.value = normalizarFontes([id])
+    return
+  }
   let novas = marcadas.value.includes(id) ? marcadas.value.filter((f) => f !== id) : [...marcadas.value, id]
   // tirar uma fonte leva junto quem depende dela (Produtos só existe pelos Itens)
   if (!novas.includes(id)) novas = novas.filter((f) => FONTES_RELATORIO.find((x) => x.id === f)?.depende !== id)
@@ -131,11 +182,11 @@ function alternarFonte(id: FonteId) {
 }
 
 async function montar() {
-  if (!pedido.value.trim() || montando.value) return
+  if (!pedido.value.trim() || montando.value || faltaImportacao.value) return
   montando.value = true
   try {
     const fontes = normalizarFontes(marcadas.value)
-    const resposta = await montarComIA(fontes, pedido.value)
+    const resposta = await montarComIA(fontes, pedido.value, { importacao: deImportacao.value ? importacao.value : null })
     if (!resposta.definicao.blocos.length) {
       toast.warning(resposta.resumo || 'A IA não conseguiu montar blocos com esse pedido — tente descrever de outro jeito.', { duration: 8000 })
       return
@@ -156,7 +207,7 @@ async function montar() {
 
 async function criarEmBranco() {
   try {
-    const relatorio = await criar({ nome: 'Novo relatório', definicao: definicaoVazia(marcadas.value) })
+    const relatorio = await criar({ nome: 'Novo relatório', definicao: definicaoVazia(marcadas.value, importacao.value) })
     await navigateTo(`/relatorios/${relatorio.id}`)
   } catch (e: any) {
     toast.error(e?.message || 'Não foi possível criar o relatório')

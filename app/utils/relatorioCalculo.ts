@@ -1,6 +1,13 @@
 import {
   campoRelatorio,
+  compilarFormula,
   NOME_OPERACAO,
+  partesDaMedida,
+  PARTE_MAX,
+  PARTE_MIN,
+  PARTE_QTD,
+  PARTE_SOMA,
+  type BaseCampo,
   type BlocoRelatorio,
   type DadosRelatorio,
   type FiltroRelatorio,
@@ -51,6 +58,7 @@ export function rotuloGrupo(valor: string, g: GrupoBloco): string {
 }
 
 export function rotuloMedida(m: MedidaBloco): string {
+  if (m.formula) return m.nome || 'Valor calculado'
   const nome = campoRelatorio(m.campo)?.nome ?? m.campo
   if (m.op === 'soma') return nome
   if (m.op === 'contagem') return m.campo === 'pedido.numero' ? 'Qtd. de pedidos' : `Qtd. de ${nome.toLowerCase()}`
@@ -72,10 +80,13 @@ const fmtMoedaCurta = new Intl.NumberFormat('pt-BR', {
 })
 const fmtNumero = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 })
 const fmtNumeroCurto = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 })
+const fmtPercentual = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1 })
 
 export function formatarMedida(valor: number | null, m: MedidaBloco, curto = false): string {
   if (valor == null || !Number.isFinite(valor)) return '–'
-  const moeda = m.op !== 'contagem' && campoRelatorio(m.campo)?.tipo === 'moeda'
+  // valor calculado diz o próprio formato: a conta pode misturar campos de tipos diferentes
+  if (m.formula && m.formato === 'percentual') return fmtPercentual.format(valor)
+  const moeda = m.formula ? m.formato === 'moeda' : m.op !== 'contagem' && campoRelatorio(m.campo)?.tipo === 'moeda'
   if (moeda) return (curto && Math.abs(valor) >= 10_000 ? fmtMoedaCurta : fmtMoeda).format(valor)
   return (curto && Math.abs(valor) >= 10_000 ? fmtNumeroCurto : fmtNumero).format(valor)
 }
@@ -95,8 +106,14 @@ function passaFiltro(linha: LinhaRelatorio, f: FiltroRelatorio): boolean {
 }
 
 interface Condicao {
-  base: 'pedido' | 'item'
+  base: BaseCampo
   testa: (linha: LinhaRelatorio) => boolean
+}
+
+function dentroDoIntervalo(valor: unknown, intervalo: IntervaloDatas): boolean {
+  const data = String(valor ?? '').slice(0, 10)
+  if (!data) return false
+  return (!intervalo.de || data >= intervalo.de) && (!intervalo.ate || data <= intervalo.ate)
 }
 
 function condicoes(filtros: FiltroRelatorio[], selecoes: Selecoes, intervalo: IntervaloDatas | null): Condicao[] {
@@ -115,14 +132,9 @@ function condicoes(filtros: FiltroRelatorio[], selecoes: Selecoes, intervalo: In
     lista.push({ base: campo.base, testa: (l) => marcados.has(valorGrupo(l, grupo)) })
   }
   if (intervalo && (intervalo.de || intervalo.ate)) {
-    lista.push({
-      base: 'pedido',
-      testa: (l) => {
-        const data = String(l['pedido.emissao'] ?? '').slice(0, 10)
-        if (!data) return false
-        return (!intervalo.de || data >= intervalo.de) && (!intervalo.ate || data <= intervalo.ate)
-      }
-    })
+    lista.push({ base: 'pedido', testa: (l) => dentroDoIntervalo(l['pedido.emissao'], intervalo) })
+    // nas linhas de importação a data é o período do arquivo
+    lista.push({ base: 'linha', testa: (l) => dentroDoIntervalo(l._data, intervalo) })
   }
   return lista
 }
@@ -141,24 +153,68 @@ export function filtrarDados(
   if (!lista.length) return dados
   const dePedido = lista.filter((c) => c.base === 'pedido')
   const deItem = lista.filter((c) => c.base === 'item')
+  const deLinha = lista.filter((c) => c.base === 'linha')
 
   let pedidos = dados.pedidos.filter((l) => dePedido.every((c) => c.testa(l)))
   // a linha de item traz os campos do pedido repetidos, então as duas listas valem pra ela
-  const itens = dados.itens.filter((l) => lista.every((c) => c.testa(l)))
+  const itens = dados.itens.filter((l) => dePedido.every((c) => c.testa(l)) && deItem.every((c) => c.testa(l)))
   if (deItem.length) {
     const comItem = new Set(itens.map((l) => l._pid))
     pedidos = pedidos.filter((l) => comItem.has(l._pid))
   }
-  return { pedidos, itens }
+  const linhas = dados.linhas?.filter((l) => deLinha.every((c) => c.testa(l)))
+  return { ...dados, pedidos, itens, linhas }
 }
 
-/** O bloco lê as linhas de item quando usa algum campo de item/produto; senão, as de pedido. */
-export function baseDoBloco(bloco: BlocoRelatorio): 'pedido' | 'item' {
-  const usados = [...bloco.medidas.map((m) => m.campo), ...bloco.grupos.map((g) => g.campo)]
-  return usados.some((id) => campoRelatorio(id)?.base === 'item') ? 'item' : 'pedido'
+/**
+ * O bloco lê as linhas de item quando usa algum campo de item/produto; senão, as de pedido.
+ * Bloco de relatório de importação lê as linhas (resumidas) dos arquivos.
+ */
+export function baseDoBloco(bloco: BlocoRelatorio): BaseCampo {
+  return baseDosCampos([...bloco.medidas.flatMap(partesDaMedida).map((m) => m.campo), ...bloco.grupos.map((g) => g.campo)])
+}
+
+function baseDosCampos(ids: string[]): BaseCampo {
+  const bases = ids.map((id) => campoRelatorio(id)?.base)
+  if (bases.includes('linha')) return 'linha'
+  return bases.includes('item') ? 'item' : 'pedido'
+}
+
+export function linhasDaBase(dados: DadosRelatorio, base: BaseCampo | undefined): LinhaRelatorio[] {
+  if (base === 'linha') return dados.linhas ?? []
+  return base === 'item' ? dados.itens : dados.pedidos
+}
+
+/**
+ * Medida sobre linhas de importação: cada linha já é um resumo feito pelo banco, com a soma, a
+ * quantidade, o menor e o maior valor do campo — aqui só se junta o que os filtros deixaram.
+ */
+function agregarResumidas(linhas: LinhaRelatorio[], m: MedidaBloco): number | null {
+  let soma = 0
+  let n = 0
+  let min = Infinity
+  let max = -Infinity
+  for (const l of linhas) {
+    const qtd = Number(l[m.campo + PARTE_QTD]) || 0
+    if (!qtd) continue
+    n += qtd
+    soma += Number(l[m.campo + PARTE_SOMA]) || 0
+    min = Math.min(min, Number(l[m.campo + PARTE_MIN]))
+    max = Math.max(max, Number(l[m.campo + PARTE_MAX]))
+  }
+  if (!n) return m.op === 'soma' ? 0 : null
+  if (m.op === 'soma') return soma
+  if (m.op === 'media') return soma / n
+  return m.op === 'minimo' ? min : max
 }
 
 export function agregar(linhas: LinhaRelatorio[], m: MedidaBloco): number | null {
+  // valor calculado: cada parte sobre estas mesmas linhas, depois a conta entre os resultados —
+  // é por isso que um percentual sai certo em qualquer agrupamento (não é soma de percentuais)
+  if (m.formula && m.partes?.length) {
+    const conta = compilarFormula(m.formula, m.partes.length)
+    return conta ? conta(m.partes.map((p) => agregar(linhas, p))) : null
+  }
   if (m.op === 'contagem') {
     const vistos = new Set<string>()
     for (const l of linhas) {
@@ -167,6 +223,7 @@ export function agregar(linhas: LinhaRelatorio[], m: MedidaBloco): number | null
     }
     return vistos.size
   }
+  if (campoRelatorio(m.campo)?.base === 'linha') return agregarResumidas(linhas, m)
 
   // valor do pedido lido em linhas de item se repete a cada item — conta uma vez por pedido
   const umPorPedido = campoRelatorio(m.campo)?.base === 'pedido'
@@ -230,7 +287,7 @@ function agrupar(linhas: LinhaRelatorio[], g: GrupoBloco): Map<string, LinhaRela
 
 /** Categorias × séries de um bloco de gráfico (colunas, barras, linha, área, rosca). */
 export function calcularGrafico(bloco: BlocoRelatorio, dados: DadosRelatorio): ResultadoGrafico {
-  const linhas = baseDoBloco(bloco) === 'item' ? dados.itens : dados.pedidos
+  const linhas = linhasDaBase(dados, baseDoBloco(bloco))
   const grupo = bloco.grupos[0]
   const medida = bloco.medidas[0]
   if (!grupo || !medida) return { categorias: [], series: [], ocultas: 0 }
@@ -303,8 +360,7 @@ export function calcularGrafico(bloco: BlocoRelatorio, dados: DadosRelatorio): R
 export function calcularNumero(bloco: BlocoRelatorio, dados: DadosRelatorio): number | null {
   const medida = bloco.medidas[0]
   if (!medida) return null
-  const linhas = campoRelatorio(medida.campo)?.base === 'item' ? dados.itens : dados.pedidos
-  return agregar(linhas, medida)
+  return agregar(linhasDaBase(dados, baseDosCampos(partesDaMedida(medida).map((p) => p.campo))), medida)
 }
 
 export interface ResultadoTabela {
@@ -319,7 +375,7 @@ export interface ResultadoTabela {
 }
 
 export function calcularTabela(bloco: BlocoRelatorio, dados: DadosRelatorio): ResultadoTabela {
-  const linhasBase = baseDoBloco(bloco) === 'item' ? dados.itens : dados.pedidos
+  const linhasBase = linhasDaBase(dados, baseDoBloco(bloco))
   const { grupos, medidas } = bloco
   const colunas = [
     ...grupos.map((g) => ({ rotulo: nomeGrupo(g), numerica: false })),

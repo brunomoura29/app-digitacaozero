@@ -2,8 +2,12 @@ import {
   normalizarDefinicao,
   type DadosRelatorio,
   type DefinicaoRelatorio,
-  type FonteId
+  type FonteId,
+  type FonteImportacao
 } from '#shared/utils/relatorios'
+
+/** O que `/api/relatorios/dados` devolve: as linhas e, nos relatórios de importação, a fonte atualizada. */
+export type RespostaDados = DadosRelatorio & { importacao?: FonteImportacao }
 
 export interface Relatorio {
   id: string
@@ -118,14 +122,38 @@ export function useRelatorios() {
     itens.value = itens.value.filter((r) => r.id !== id)
   }
 
-  /** Linhas pro painel. Com `clienteId`, só as daquele cliente ("ver como o cliente"). */
-  function buscarDados(fontes: FonteId[], clienteId?: string | null): Promise<DadosRelatorio> {
-    return $fetch<DadosRelatorio>('/api/relatorios/dados', { method: 'POST', body: { fontes, clienteId: clienteId ?? null } })
+  /**
+   * Linhas pro painel. Com `clienteId`, só as daquele cliente ("ver como o cliente"). Relatório
+   * de importação recebe as linhas resumidas pelo banco conforme a planta, e a `importacao`
+   * com o catálogo de campos atualizado.
+   */
+  function buscarDados(definicao: DefinicaoRelatorio, clienteId?: string | null): Promise<RespostaDados> {
+    return $fetch<RespostaDados>('/api/relatorios/dados', {
+      method: 'POST',
+      body: {
+        fontes: definicao.fontes,
+        clienteId: clienteId ?? null,
+        // os relatórios de pedidos trazem todos os campos das fontes — não precisam da planta
+        definicao: definicao.importacao ? definicao : undefined
+      }
+    })
   }
 
   /** Pede a planta à IA. Com `definicaoAtual`, é um ajuste do painel que já existe. */
-  function montarComIA(fontes: FonteId[], pedido: string, definicaoAtual?: DefinicaoRelatorio): Promise<RespostaMontagem> {
-    return $fetch<RespostaMontagem>('/api/relatorios/montar', { method: 'POST', body: { fontes, pedido, definicaoAtual } })
+  function montarComIA(
+    fontes: FonteId[],
+    pedido: string,
+    opcoes: { definicaoAtual?: DefinicaoRelatorio; importacao?: FonteImportacao | null } = {}
+  ): Promise<RespostaMontagem> {
+    return $fetch<RespostaMontagem>('/api/relatorios/montar', { method: 'POST', body: { fontes, pedido, ...opcoes } }).then(
+      // é a leitura da planta que apresenta ao cálculo os campos de um relatório de importação
+      (resposta) => ({ ...resposta, definicao: normalizarDefinicao(resposta.definicao) })
+    )
+  }
+
+  /** Valores que existem num campo dos arquivos escolhidos — pros filtros do editor de bloco. */
+  function buscarValoresImportacao(importacao: FonteImportacao, campo: string): Promise<string[]> {
+    return $fetch<string[]>('/api/relatorios/valores', { method: 'POST', body: { importacao, campo } })
   }
 
   /** Todos os clientes da empresa, por nome — sem os filtros da tela de Clientes (que `useClientes` guarda). */
@@ -189,6 +217,7 @@ export function useRelatorios() {
     remover,
     buscarDados,
     montarComIA,
+    buscarValoresImportacao,
     listarClientes,
     carregarAcessos,
     criarAcesso,

@@ -54,10 +54,14 @@
 
       <main class="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">
         <BaseEmptyState
-          v-if="!relatorio.dados.pedidos.length"
+          v-if="semDados"
           icon="heroicons:inbox"
           title="Ainda não há dados"
-          description="Assim que houver pedidos no seu nome, eles aparecem aqui automaticamente."
+          :description="
+            relatorio.definicao.importacao
+              ? 'Assim que houver dados seus neste relatório, eles aparecem aqui automaticamente.'
+              : 'Assim que houver pedidos no seu nome, eles aparecem aqui automaticamente.'
+          "
         />
         <RelatoriosPainel v-else :definicao="relatorio.definicao" :dados="relatorio.dados" />
       </main>
@@ -66,8 +70,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import type { DadosRelatorio, DefinicaoRelatorio } from '#shared/utils/relatorios'
+import { computed, onMounted, ref } from 'vue'
+import { normalizarDefinicao, type DadosRelatorio, type DefinicaoRelatorio } from '#shared/utils/relatorios'
 
 definePageMeta({ layout: 'default', title: 'Relatório' })
 const tituloDaAba = ref('Relatório')
@@ -93,15 +97,23 @@ const entrando = ref(false)
 const erro = ref('')
 const atualizadoEm = ref('')
 
+// relatório de importação traz as linhas dos arquivos (resumidas); os outros, os pedidos
+const semDados = computed(() => {
+  const r = relatorio.value
+  return !!r && !(r.definicao.importacao ? r.dados.linhas?.length : r.dados.pedidos.length)
+})
+
 async function entrar(tentativa: string, silencioso = false) {
   if (!tentativa.trim() || entrando.value) return
   entrando.value = true
   erro.value = ''
   try {
-    relatorio.value = await $fetch<RelatorioPublico>('/api/relatorios/publico', {
+    const resposta = await $fetch<RelatorioPublico>('/api/relatorios/publico', {
       method: 'POST',
       body: { token, senha: tentativa }
     })
+    // é a leitura da planta que apresenta ao cálculo os campos de um relatório de importação
+    relatorio.value = { ...resposta, definicao: normalizarDefinicao(resposta.definicao) }
     senhaAceita.value = tentativa
     atualizadoEm.value = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     tituloDaAba.value = relatorio.value.nome

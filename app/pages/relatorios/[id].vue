@@ -46,8 +46,12 @@
             :disabled="montando"
             :placeholder="
               definicao.blocos.length
-                ? 'Peça um ajuste: “troque a rosca por barras”, “adicione o top 10 de produtos”, “mostre só pedidos aprovados”…'
-                : 'Diga o que você quer ver: “total vendido por mês, por fábrica e os 10 produtos que mais vendem”…'
+                ? definicao.importacao
+                  ? 'Peça um ajuste: “troque a rosca por barras”, “adicione uma tabela por conta”, “deixe os cartões coloridos”…'
+                  : 'Peça um ajuste: “troque a rosca por barras”, “adicione o top 10 de produtos”, “mostre só pedidos aprovados”…'
+                : definicao.importacao
+                  ? 'Diga o que você quer ver: “totais por mês, as 10 maiores contas e uma tabela de detalhe”…'
+                  : 'Diga o que você quer ver: “total vendido por mês, por fábrica e os 10 produtos que mais vendem”…'
             "
             class="min-w-0 flex-1 basis-72 rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:opacity-60"
           />
@@ -79,22 +83,39 @@
       <!-- ───── Fontes + modo edição ───── -->
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-xs font-medium text-shift3-text-muted">Fontes:</span>
+        <!-- relatório de importação: a fonte é o conjunto + os arquivos, e o clique abre a escolha dos arquivos -->
         <button
-          v-for="f in FONTES_RELATORIO"
-          :key="f.id"
+          v-if="definicao.importacao"
           type="button"
-          class="inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 text-xs transition"
-          :class="
-            definicao.fontes.includes(f.id)
-              ? 'border-shift3-teal/40 bg-shift3-green/15 font-semibold text-shift3-text'
-              : 'border-shift3-border text-shift3-text-muted hover:text-shift3-text'
-          "
-          :title="f.descricao"
-          @click="alternarFonte(f.id)"
+          class="inline-flex max-w-full items-center gap-1.5 rounded-pill border border-shift3-teal/40 bg-shift3-green/15 px-2.5 py-1 text-xs font-semibold text-shift3-text transition hover:bg-shift3-green/30"
+          title="Trocar os arquivos que entram neste relatório"
+          @click="abrirArquivos"
         >
-          <Icon :name="definicao.fontes.includes(f.id) ? 'heroicons:check' : 'heroicons:plus'" class="h-3 w-3" />
-          {{ f.nome }}
+          <Icon name="heroicons:arrow-up-tray" class="h-3 w-3 shrink-0" />
+          <span class="min-w-0 truncate">
+            {{ definicao.importacao.modelo_nome }} ·
+            {{ definicao.importacao.arquivos ? `${definicao.importacao.arquivos.length} arquivo(s)` : 'todos os arquivos' }}
+          </span>
+          <Icon name="heroicons:pencil-square" class="h-3 w-3 shrink-0" />
         </button>
+        <template v-else>
+          <button
+            v-for="f in fontesDePedidos"
+            :key="f.id"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 text-xs transition"
+            :class="
+              definicao.fontes.includes(f.id)
+                ? 'border-shift3-teal/40 bg-shift3-green/15 font-semibold text-shift3-text'
+                : 'border-shift3-border text-shift3-text-muted hover:text-shift3-text'
+            "
+            :title="f.descricao"
+            @click="alternarFonte(f.id)"
+          >
+            <Icon :name="definicao.fontes.includes(f.id) ? 'heroicons:check' : 'heroicons:plus'" class="h-3 w-3" />
+            {{ f.nome }}
+          </button>
+        </template>
 
         <div class="ml-auto flex items-center gap-3">
           <div v-if="editando" class="flex items-center gap-1.5" title="Cor dos blocos que não têm cor própria">
@@ -158,8 +179,12 @@
       </BaseEmptyState>
 
       <div v-else-if="dados" class="relative" :class="carregandoDados || montando ? 'pointer-events-none opacity-60' : ''">
-        <p v-if="!dados.pedidos.length" class="mb-3 rounded-default bg-warning/15 px-3 py-2 text-sm text-shift3-text">
-          {{ verComo ? 'Esse cliente ainda não tem pedidos — o painel dele abre vazio.' : 'Ainda não há pedidos cadastrados — os blocos aparecem vazios.' }}
+        <p v-if="semDados" class="mb-3 rounded-default bg-warning/15 px-3 py-2 text-sm text-shift3-text">
+          {{ avisoSemDados }}
+        </p>
+        <p v-if="dados.cortado" class="mb-3 rounded-default bg-warning/15 px-3 py-2 text-sm text-shift3-text">
+          Este painel pede detalhe demais para o volume dos arquivos e os números vieram incompletos. Tire dos blocos os campos com
+          muitos valores diferentes (como histórico ou número de documento) ou marque menos arquivos na fonte.
         </p>
         <RelatoriosPainel v-model:definicao="definicao" :dados="dados" :editavel="editando" @editar="abrirEditor" />
       </div>
@@ -169,10 +194,23 @@
       v-if="editorAberto && dados"
       :bloco="blocoEmEdicao"
       :fontes="definicao.fontes"
+      :importacao="definicao.importacao ?? null"
       :dados="dados"
       @fechar="editorAberto = false"
       @salvar="aplicarBloco"
     />
+
+    <!-- relatório de importação: trocar os arquivos que entram -->
+    <BaseModal v-if="arquivosAberto" @close="arquivosAberto = false">
+      <div class="space-y-4">
+        <h3 class="text-lg font-semibold text-shift3-text">Arquivos do relatório</h3>
+        <RelatoriosArquivosImportacao v-model="rascunhoArquivos" travar-conjunto />
+        <div class="flex justify-end gap-2">
+          <BaseButton variant="secondary" @click="arquivosAberto = false">Cancelar</BaseButton>
+          <BaseButton variant="primary" icon-left="heroicons:check" :disabled="!rascunhoArquivos" @click="aplicarArquivos">Aplicar</BaseButton>
+        </div>
+      </div>
+    </BaseModal>
     <RelatoriosAcessos v-if="compartilhando && relatorio" :relatorio-id="relatorio.id" :nome-relatorio="nome" @fechar="compartilhando = false" />
   </div>
 </template>
@@ -186,10 +224,13 @@ import {
   definicaoVazia,
   normalizarDefinicao,
   normalizarFontes,
+  normalizarImportacao,
+  planoImportacao,
   type BlocoRelatorio,
   type DadosRelatorio,
   type DefinicaoRelatorio,
-  type FonteId
+  type FonteId,
+  type FonteImportacao
 } from '#shared/utils/relatorios'
 import type { ClienteResumo, Relatorio } from '~/composables/useRelatorios'
 
@@ -248,8 +289,10 @@ async function carregarDados() {
   const meu = ++pedidoDeDados
   carregandoDados.value = true
   try {
-    const resposta = await buscarDados(definicao.value.fontes, verComo.value || null)
-    if (meu === pedidoDeDados) dados.value = resposta
+    const { importacao, ...resposta } = await buscarDados(definicao.value, verComo.value || null)
+    if (meu !== pedidoDeDados) return
+    dados.value = resposta
+    if (importacao) atualizarCatalogo(importacao)
   } catch (e: any) {
     if (meu === pedidoDeDados) toast.error(e?.data?.statusMessage || 'Não foi possível buscar os dados do relatório')
   } finally {
@@ -257,8 +300,63 @@ async function carregarDados() {
   }
 }
 
-watch(verComo, carregarDados)
-watch(() => definicao.value.fontes.join(','), carregarDados)
+/**
+ * O template do conjunto pode ter ganhado (ou perdido) colunas depois que o relatório foi
+ * montado: o servidor manda o catálogo de agora e a planta acompanha. Se nada mais mudou, o
+ * relatório continua "salvo" — a troca é só de catálogo e o servidor refaz isso a cada leitura.
+ */
+function atualizarCatalogo(recebida: FonteImportacao) {
+  const antes = definicao.value.importacao
+  // passa pela mesma limpeza da planta, senão a comparação acusaria diferença que não existe
+  const atual = normalizarImportacao(recebida)
+  if (!antes || !atual || JSON.stringify([antes.modelo_nome, antes.campos]) === JSON.stringify([atual.modelo_nome, atual.campos])) return
+  const estavaSalvo = !alterado.value
+  const nova = normalizarDefinicao(definicao.value, definicao.value.fontes, { ...atual, arquivos: antes.arquivos })
+  const perdidos = definicao.value.blocos.length - nova.blocos.length
+  definicao.value = nova
+  if (perdidos > 0) toast.warning(`${perdidos} bloco(s) usavam colunas que saíram do template e foram removidos.`, { duration: 8000 })
+  else if (estavaSalvo) salvo.value = retrato(nome.value, nova)
+}
+
+/** O que muda o resumo que o banco devolve num relatório de importação: arquivos e campos usados. */
+const chaveImportacao = computed(() => {
+  const fonte = definicao.value.importacao
+  return fonte ? JSON.stringify([fonte.modelo_id, fonte.arquivos, planoImportacao(definicao.value)]) : ''
+})
+
+// a primeira carga é a do onMounted; os watchers só valem pro que mudar depois dela
+let primeiraCargaFeita = false
+const recarregar = () => primeiraCargaFeita && carregarDados()
+
+watch(verComo, recarregar)
+watch(() => definicao.value.fontes.join(','), recarregar)
+watch(chaveImportacao, recarregar)
+
+const fontesDePedidos = FONTES_RELATORIO.filter((f) => !f.exclusiva)
+const semDados = computed(() => !!dados.value && !(definicao.value.importacao ? dados.value.linhas?.length : dados.value.pedidos.length))
+const avisoSemDados = computed(() => {
+  if (definicao.value.importacao) {
+    return verComo.value
+      ? 'Esse cliente não tem arquivo entre os escolhidos — o painel dele abre vazio.'
+      : 'Os arquivos escolhidos não têm linhas — os blocos aparecem vazios.'
+  }
+  return verComo.value ? 'Esse cliente ainda não tem pedidos — o painel dele abre vazio.' : 'Ainda não há pedidos cadastrados — os blocos aparecem vazios.'
+})
+
+// ── arquivos do relatório de importação ──
+const arquivosAberto = ref(false)
+const rascunhoArquivos = ref<FonteImportacao | null>(null)
+
+function abrirArquivos() {
+  rascunhoArquivos.value = definicao.value.importacao ?? null
+  arquivosAberto.value = true
+}
+
+function aplicarArquivos() {
+  if (!rascunhoArquivos.value) return
+  definicao.value = normalizarDefinicao(definicao.value, definicao.value.fontes, rascunhoArquivos.value)
+  arquivosAberto.value = false
+}
 
 onMounted(async () => {
   try {
@@ -273,6 +371,7 @@ onMounted(async () => {
     if (recado.value?.id === achado.id) respostaIA.value = { resumo: recado.value.resumo, avisos: recado.value.avisos }
     recado.value = null
     await carregarDados()
+    primeiraCargaFeita = true
   } catch (e: any) {
     toast.error(e?.message || 'Não foi possível abrir o relatório')
   } finally {
@@ -306,7 +405,10 @@ async function pedirAjuste() {
   montando.value = true
   try {
     const atual = definicao.value
-    const resposta = await montarComIA(atual.fontes, pedido.value, atual.blocos.length ? atual : undefined)
+    const resposta = await montarComIA(atual.fontes, pedido.value, {
+      definicaoAtual: atual.blocos.length ? atual : undefined,
+      importacao: atual.importacao
+    })
     if (!resposta.definicao.blocos.length) {
       respostaIA.value = { resumo: resposta.resumo || 'A IA não conseguiu montar blocos com esse pedido.', avisos: resposta.avisos }
       return

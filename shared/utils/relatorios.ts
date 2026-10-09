@@ -6,10 +6,13 @@
  * sobre as linhas reais. A IA nunca devolve valor, só a planta.
  */
 
-export type FonteId = 'pedidos' | 'itens' | 'clientes' | 'vendedores' | 'produtos'
+export type FonteId = 'pedidos' | 'itens' | 'clientes' | 'vendedores' | 'produtos' | 'importacao'
 export type TipoCampoRelatorio = 'texto' | 'numero' | 'moeda' | 'data'
-/** De qual conjunto de linhas o campo sai: uma linha por pedido ou uma por item. */
-export type BaseCampo = 'pedido' | 'item'
+/**
+ * De qual conjunto de linhas o campo sai: uma linha por pedido, uma por item, ou as linhas
+ * (já resumidas pelo banco) dos arquivos importados.
+ */
+export type BaseCampo = 'pedido' | 'item' | 'linha'
 
 export interface FonteRelatorio {
   id: FonteId
@@ -19,6 +22,8 @@ export interface FonteRelatorio {
   /** Fonte que precisa estar junto (Produtos só se liga aos pedidos pelos itens). */
   depende?: FonteId
   obrigatoria?: boolean
+  /** Não se mistura com as outras: o relatório é só dela (Importações). */
+  exclusiva?: boolean
 }
 
 export interface CampoRelatorio {
@@ -27,6 +32,11 @@ export interface CampoRelatorio {
   tipo: TipoCampoRelatorio
   fonte: FonteId
   base: BaseCampo
+  /**
+   * Só nos campos de importação: de onde o valor sai no banco — `periodo`, `cliente`,
+   * `arquivo`, `aba`, `l:<id>` (coluna da linha) ou `c:<id>` (campo do cabeçalho do arquivo).
+   */
+  origem?: string
 }
 
 export const FONTES_RELATORIO: FonteRelatorio[] = [
@@ -61,6 +71,13 @@ export const FONTES_RELATORIO: FonteRelatorio[] = [
     descricao: 'Cadastro do produto de cada item: marca, fabricante, unidade, NCM e modelo.',
     icone: 'heroicons:cube',
     depende: 'itens'
+  },
+  {
+    id: 'importacao',
+    nome: 'Importações',
+    descricao: 'Arquivos que você importou (balancete, razão…). Você escolhe o conjunto de dados e quais arquivos entram.',
+    icone: 'heroicons:arrow-up-tray',
+    exclusiva: true
   }
 ]
 
@@ -107,16 +124,138 @@ export function campoRelatorio(id: string): CampoRelatorio | undefined {
   return CAMPO_POR_ID.get(id)
 }
 
-/** Fontes válidas e completas: Pedidos sempre entra, e quem depende de outra traz a outra junto. */
+/** Os campos de importação só existem na planta: entram aqui quando ela é lida (ver `normalizarDefinicao`). */
+function registrarCampos(campos: CampoRelatorio[]) {
+  for (const c of campos) CAMPO_POR_ID.set(c.id, c)
+}
+
+/**
+ * Fontes válidas e completas: Pedidos sempre entra, e quem depende de outra traz a outra junto.
+ * Importações não se mistura: um relatório de importação tem só ela.
+ */
 export function normalizarFontes(fontes: unknown): FonteId[] {
   const pedidas = new Set<string>(Array.isArray(fontes) ? fontes.map(String) : [])
+  if (pedidas.has('importacao')) return ['importacao']
   pedidas.add('pedidos')
   for (const f of FONTES_RELATORIO) if (f.depende && pedidas.has(f.id)) pedidas.add(f.depende)
   return FONTES_RELATORIO.filter((f) => pedidas.has(f.id)).map((f) => f.id)
 }
 
-export function camposDasFontes(fontes: FonteId[]): CampoRelatorio[] {
+export function camposDasFontes(fontes: FonteId[], importacao?: FonteImportacao | null): CampoRelatorio[] {
+  if (fontes.includes('importacao')) return importacao?.campos ?? []
   return CAMPOS_RELATORIO.filter((c) => fontes.includes(c.fonte))
+}
+
+// ───────────────────────── fonte Importações ─────────────────────────
+
+/**
+ * O que um relatório de importação lê: um conjunto de dados (template com destino `dados`) e
+ * os arquivos escolhidos dele. Os campos não são fixos como os de pedidos — saem das colunas
+ * do template, por isso a planta carrega o próprio catálogo.
+ */
+export interface FonteImportacao {
+  modelo_id: string
+  modelo_nome: string
+  /** Ids dos arquivos (importações) que entram. `null` = todos, inclusive os importados depois. */
+  arquivos: string[] | null
+  campos: CampoRelatorio[]
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const TIPOS_CAMPO: TipoCampoRelatorio[] = ['texto', 'numero', 'moeda', 'data']
+
+interface CampoDoTemplate {
+  id: string
+  nome: string
+  tipo: string
+}
+
+/** Prefixo dos ids de campo de um conjunto — leva o template junto pra dois conjuntos não se confundirem. */
+function prefixoImportacao(modeloId: string): string {
+  return `imp.${modeloId.slice(0, 8)}.`
+}
+
+/** Id do campo "Período" do conjunto: é a data do relatório de importação (filtro de período, evolução). */
+export function campoPeriodoImportacao(modeloId: string): string {
+  return prefixoImportacao(modeloId) + 'periodo'
+}
+
+/** Catálogo de campos de um conjunto de dados: os fixos de todo arquivo + as colunas do template. */
+export function catalogoImportacao(
+  modeloId: string,
+  schema: { campos?: CampoDoTemplate[] | null; campos_item?: CampoDoTemplate[] | null } | null | undefined
+): CampoRelatorio[] {
+  const p = prefixoImportacao(modeloId)
+  const campo = (id: string, nome: string, tipo: TipoCampoRelatorio, origem: string): CampoRelatorio => ({
+    id: p + id,
+    nome: nome.slice(0, 80),
+    tipo,
+    fonte: 'importacao',
+    base: 'linha',
+    origem
+  })
+  // `@` e `#` são separadores internos do cálculo (período do grupo, parte da medida)
+  const utilizavel = (c: CampoDoTemplate) => !!c?.id && !/[@#]/.test(c.id)
+
+  const lista: CampoRelatorio[] = [
+    campo('periodo', 'Período', 'data', 'periodo'),
+    campo('cliente', 'Cliente', 'texto', 'cliente'),
+    campo('arquivo', 'Arquivo', 'texto', 'arquivo'),
+    campo('aba', 'Aba da planilha', 'texto', 'aba')
+  ]
+  for (const c of (schema?.campos_item ?? []).filter(utilizavel)) {
+    // sim/não chega como texto ("Sim"/"Não"): serve pra separar e filtrar, não pra somar
+    const tipo = TIPOS_CAMPO.includes(c.tipo as TipoCampoRelatorio) ? (c.tipo as TipoCampoRelatorio) : 'texto'
+    lista.push(campo('l.' + c.id, c.nome || c.id, tipo, 'l:' + c.id))
+  }
+  for (const c of (schema?.campos ?? []).filter(utilizavel)) {
+    // o cabeçalho se repete em toda linha do arquivo — somar daria o valor vezes o nº de linhas
+    lista.push(campo('c.' + c.id, `${c.nome || c.id} (do arquivo)`, c.tipo === 'data' ? 'data' : 'texto', 'c:' + c.id))
+  }
+  return lista
+}
+
+export function normalizarImportacao(bruto: unknown): FonteImportacao | null {
+  const entrada = bruto as any
+  if (!entrada || typeof entrada.modelo_id !== 'string' || !UUID.test(entrada.modelo_id)) return null
+  const prefixo = prefixoImportacao(entrada.modelo_id)
+  const campos: CampoRelatorio[] = []
+  for (const c of Array.isArray(entrada.campos) ? (entrada.campos as any[]) : []) {
+    if (!c || typeof c.id !== 'string' || !c.id.startsWith(prefixo) || campos.some((x) => x.id === c.id)) continue
+    campos.push({
+      id: c.id,
+      nome: String(c.nome ?? c.id).slice(0, 80),
+      tipo: TIPOS_CAMPO.includes(c.tipo) ? c.tipo : 'texto',
+      fonte: 'importacao',
+      base: 'linha',
+      origem: typeof c.origem === 'string' ? c.origem : undefined
+    })
+  }
+  return {
+    modelo_id: entrada.modelo_id,
+    modelo_nome: String(entrada.modelo_nome ?? '').slice(0, 120),
+    arquivos: Array.isArray(entrada.arquivos) ? [...new Set<string>(entrada.arquivos.map(String).filter((id: string) => UUID.test(id)))] : null,
+    campos
+  }
+}
+
+/**
+ * O que o banco precisa devolver pra um relatório de importação: as linhas vêm resumidas, uma
+ * por combinação das `dimensoes` (campos usados pra separar, filtrar ou contar), com as
+ * `medidas` (campos somados) já acumuladas.
+ */
+export function planoImportacao(def: DefinicaoRelatorio): { dimensoes: string[]; medidas: string[] } {
+  const dimensoes = new Set<string>()
+  const medidas = new Set<string>()
+  if (def.importacao) dimensoes.add(campoPeriodoImportacao(def.importacao.modelo_id))
+  for (const f of def.filtros) dimensoes.add(f.campo)
+  for (const b of def.blocos) {
+    for (const g of b.grupos) dimensoes.add(g.campo)
+    for (const f of b.filtros) dimensoes.add(f.campo)
+    // contagem conta valores diferentes do campo, então precisa dele como dimensão
+    for (const m of b.medidas.flatMap(partesDaMedida)) (m.op === 'contagem' ? dimensoes : medidas).add(m.campo)
+  }
+  return { dimensoes: [...dimensoes].sort(), medidas: [...medidas].sort() }
 }
 
 // ───────────────────────── a planta do painel ─────────────────────────
@@ -205,10 +344,128 @@ export type EstiloBloco = (typeof ESTILOS_BLOCO)[number]
 export const CURVAS_BLOCO = ['reta', 'suave'] as const
 export type CurvaBloco = (typeof CURVAS_BLOCO)[number]
 
-export interface MedidaBloco {
+export interface ParteMedida {
   campo: string
   /** `contagem` conta valores DIFERENTES do campo (ex: contagem de "Número do pedido" = nº de pedidos). */
   op: Operacao
+}
+
+export const FORMATOS_CALCULO = ['moeda', 'numero', 'percentual'] as const
+export type FormatoCalculo = (typeof FORMATOS_CALCULO)[number]
+
+/** Quantos valores uma conta pode combinar — são as letras A, B, C… da fórmula. */
+export const MAX_PARTES = 6
+export const LETRAS_PARTES = 'ABCDEF'
+
+/**
+ * O que um bloco calcula. Normalmente é uma operação sobre um campo. Com `formula`, é um VALOR
+ * CALCULADO: cada parte é calculada primeiro (sobre as mesmas linhas, já com os filtros) e a
+ * fórmula faz a conta entre os resultados — "A - B" (margem), "A + B + C", "(A - B) / A" (%).
+ * Nesse caso `campo`/`op` repetem a 1ª parte, só pra quem lê a medida sem olhar a fórmula.
+ */
+export interface MedidaBloco extends ParteMedida {
+  /** Conta entre as partes, pelas letras: A é a 1ª parte, B a 2ª… Aceita + - * / e parênteses. */
+  formula?: string
+  partes?: ParteMedida[]
+  /** Nome que aparece no bloco (ex: "Margem"). */
+  nome?: string
+  /** `percentual`: o resultado 0,25 aparece como 25%. */
+  formato?: FormatoCalculo
+}
+
+/** As operações sobre campo que a medida precisa: ela mesma, ou as partes da conta. */
+export function partesDaMedida(m: MedidaBloco): ParteMedida[] {
+  return m.formula && m.partes?.length ? m.partes : [m]
+}
+
+// ───────────────────────── fórmula do valor calculado ─────────────────────────
+
+type Conta = (valores: (number | null)[]) => number | null
+const contasCompiladas = new Map<string, Conta | null>()
+
+/**
+ * Lê a fórmula uma vez e devolve a função que faz a conta, ou `null` se ela não é válida
+ * (símbolo desconhecido, parêntese aberto, letra além das partes). Nada de `eval`: só números,
+ * as letras das partes, + - * / e parênteses. Parte sem valor ou divisão por zero dão `null`.
+ */
+export function compilarFormula(formula: string, quantasPartes: number): Conta | null {
+  const chave = `${quantasPartes}|${formula}`
+  if (contasCompiladas.has(chave)) return contasCompiladas.get(chave)!
+
+  // aceita o jeito brasileiro de escrever: vírgula decimal, × ÷ e o travessão como menos
+  const texto = formula.replace(/[×xX]/g, '*').replace(/[÷:]/g, '/').replace(/[−–—]/g, '-').replace(/,/g, '.').replace(/\s+/g, '')
+  const simbolos = texto.match(/\d+(?:\.\d+)?|[A-Fa-f]|[-+*/()]/g) ?? []
+  let pos = 0
+  let valida = !!texto && simbolos.join('') === texto
+
+  // cada função devolve a conta daquele trecho; a precedência sai da ordem em que se chamam
+  const soma = (): Conta => {
+    let esquerda = produto()
+    while (simbolos[pos] === '+' || simbolos[pos] === '-') {
+      const menos = simbolos[pos++] === '-'
+      const a = esquerda
+      const b = produto()
+      esquerda = (v) => {
+        const x = a(v)
+        const y = b(v)
+        return x == null || y == null ? null : menos ? x - y : x + y
+      }
+    }
+    return esquerda
+  }
+  const produto = (): Conta => {
+    let esquerda = fator()
+    while (simbolos[pos] === '*' || simbolos[pos] === '/') {
+      const divide = simbolos[pos++] === '/'
+      const a = esquerda
+      const b = fator()
+      esquerda = (v) => {
+        const x = a(v)
+        const y = b(v)
+        if (x == null || y == null) return null
+        if (divide) return y === 0 ? null : x / y
+        return x * y
+      }
+    }
+    return esquerda
+  }
+  const fator = (): Conta => {
+    const s = simbolos[pos++]
+    if (s === '-') {
+      const interno = fator()
+      return (v) => {
+        const x = interno(v)
+        return x == null ? null : -x
+      }
+    }
+    if (s === '(') {
+      const interno = soma()
+      if (simbolos[pos++] !== ')') valida = false
+      return interno
+    }
+    if (s && /^\d/.test(s)) {
+      const numero = Number(s)
+      return () => numero
+    }
+    if (s && /^[A-Fa-f]$/.test(s)) {
+      const indice = LETRAS_PARTES.indexOf(s.toUpperCase())
+      if (indice >= quantasPartes) valida = false
+      return (v) => v[indice] ?? null
+    }
+    valida = false
+    return () => null
+  }
+
+  let conta: Conta | null = null
+  if (valida) {
+    const montada = soma()
+    if (valida && pos === simbolos.length) conta = (v) => {
+      const r = montada(v)
+      return r != null && Number.isFinite(r) ? r : null
+    }
+  }
+  contasCompiladas.set(chave, conta)
+  return conta
 }
 
 export interface GrupoBloco {
@@ -250,6 +507,8 @@ export interface BlocoRelatorio {
 export interface DefinicaoRelatorio {
   versao: 1
   fontes: FonteId[]
+  /** Só quando a fonte é Importações: o conjunto de dados e os arquivos escolhidos. */
+  importacao?: FonteImportacao | null
   /** Cor padrão dos blocos que não escolheram a própria ('' = neutro). */
   cor: CorBloco
   /** Valem pro painel inteiro (ex: Situação diferente de Cancelado). */
@@ -279,8 +538,8 @@ export function novoIdBloco(): string {
   return 'b' + Math.random().toString(36).slice(2, 10)
 }
 
-export function definicaoVazia(fontes: FonteId[] = ['pedidos']): DefinicaoRelatorio {
-  return { versao: 1, fontes: normalizarFontes(fontes), cor: '', filtros: [], blocos: [] }
+export function definicaoVazia(fontes: FonteId[] = ['pedidos'], importacao?: FonteImportacao | null): DefinicaoRelatorio {
+  return normalizarDefinicao({ blocos: [] }, fontes, importacao)
 }
 
 function corValida(v: unknown): CorBloco {
@@ -310,24 +569,45 @@ function normalizarFiltros(bruto: unknown, validos: Set<string>): FiltroRelatori
  * nas fontes escolhidas, medida numérica em campo de texto, bloco sem nada pra mostrar.
  * Nunca lança erro — o pior caso é um painel com menos blocos.
  */
-export function normalizarDefinicao(bruta: unknown, fontesPedidas?: unknown): DefinicaoRelatorio {
+export function normalizarDefinicao(bruta: unknown, fontesPedidas?: unknown, importacaoPedida?: unknown): DefinicaoRelatorio {
   const entrada = (bruta ?? {}) as any
   const fontes = normalizarFontes(fontesPedidas ?? entrada.fontes)
-  const validos = new Set(camposDasFontes(fontes).map((c) => c.id))
+  const importacao = fontes.includes('importacao') ? normalizarImportacao(importacaoPedida ?? entrada.importacao) : null
+  if (importacao) registrarCampos(importacao.campos)
+  const validos = new Set(camposDasFontes(fontes, importacao).map((c) => c.id))
 
   const blocos: BlocoRelatorio[] = []
   const idsUsados = new Set<string>()
   for (const b of Array.isArray(entrada.blocos) ? (entrada.blocos as any[]) : []) {
     if (!b || !TIPOS_BLOCO.includes(b.tipo)) continue
 
-    const medidas: MedidaBloco[] = []
-    for (const m of Array.isArray(b.medidas) ? (b.medidas as any[]) : []) {
+    const parte = (m: any): ParteMedida | null => {
       const campo = m && validos.has(m.campo) ? campoRelatorio(m.campo)! : null
-      if (!campo) continue
+      if (!campo) return null
       const numerico = campo.tipo === 'numero' || campo.tipo === 'moeda'
       // conta em texto/data só faz sentido como contagem
       const op: Operacao = OPERACOES.includes(m.op) && (numerico || m.op === 'contagem') ? m.op : numerico ? 'soma' : 'contagem'
-      medidas.push({ campo: campo.id, op })
+      return { campo: campo.id, op }
+    }
+
+    const medidas: MedidaBloco[] = []
+    for (const m of Array.isArray(b.medidas) ? (b.medidas as any[]) : []) {
+      const formula = typeof m?.formula === 'string' ? m.formula.trim().slice(0, 120) : ''
+      if (!formula) {
+        const simples = parte(m)
+        if (simples) medidas.push(simples)
+        continue
+      }
+      // valor calculado: se uma parte cai, as letras da fórmula mudariam de dono — sai a medida inteira
+      const partes = (Array.isArray(m.partes) ? (m.partes as any[]) : []).slice(0, MAX_PARTES).map(parte)
+      if (!partes.length || partes.includes(null) || !compilarFormula(formula, partes.length)) continue
+      medidas.push({
+        ...partes[0]!,
+        formula,
+        partes: partes as ParteMedida[],
+        nome: String(m.nome ?? '').trim().slice(0, 60) || 'Valor calculado',
+        formato: FORMATOS_CALCULO.includes(m.formato) ? m.formato : 'numero'
+      })
     }
 
     const grupos: GrupoBloco[] = []
@@ -369,6 +649,8 @@ export function normalizarDefinicao(bruta: unknown, fontesPedidas?: unknown): De
   return {
     versao: 1,
     fontes,
+    // sem a chave nos relatórios de pedidos: a planta deles fica igual à de antes
+    ...(importacao ? { importacao } : {}),
     cor: corValida(entrada.cor),
     filtros: normalizarFiltros(entrada.filtros, validos),
     blocos: blocos.slice(0, 24)
@@ -377,10 +659,10 @@ export function normalizarDefinicao(bruta: unknown, fontesPedidas?: unknown): De
 
 /** Campos que a planta realmente usa — o link público só recebe essas colunas. */
 export function camposUsados(def: DefinicaoRelatorio): string[] {
-  const usados = new Set<string>(['pedido.emissao'])
+  const usados = new Set<string>([def.importacao ? campoPeriodoImportacao(def.importacao.modelo_id) : 'pedido.emissao'])
   for (const f of def.filtros) usados.add(f.campo)
   for (const b of def.blocos) {
-    for (const m of b.medidas) usados.add(m.campo)
+    for (const m of b.medidas.flatMap(partesDaMedida)) usados.add(m.campo)
     for (const g of b.grupos) usados.add(g.campo)
     for (const f of b.filtros) usados.add(f.campo)
   }
@@ -390,7 +672,20 @@ export function camposUsados(def: DefinicaoRelatorio): string[] {
 /** Linha de dados: chave = id do campo. `_pid` (id do pedido) liga item ↔ pedido. */
 export type LinhaRelatorio = Record<string, string | number | null>
 
+/** Sufixos das medidas numa linha resumida de importação: soma, quantos valores, menor e maior. */
+export const PARTE_SOMA = '#s'
+export const PARTE_QTD = '#n'
+export const PARTE_MIN = '#min'
+export const PARTE_MAX = '#max'
+
 export interface DadosRelatorio {
   pedidos: LinhaRelatorio[]
   itens: LinhaRelatorio[]
+  /**
+   * Relatório de importação: linhas já resumidas pelo banco — uma por combinação dos campos de
+   * separar/filtrar, com cada medida em `<campo>#s`, `#n`, `#min`, `#max` e a data em `_data`.
+   */
+  linhas?: LinhaRelatorio[]
+  /** O resumo passou do limite de linhas e veio cortado: os números do painel estão incompletos. */
+  cortado?: boolean
 }

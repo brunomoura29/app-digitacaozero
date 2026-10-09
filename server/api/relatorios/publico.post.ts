@@ -1,5 +1,5 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { camposUsados, normalizarDefinicao } from '#shared/utils/relatorios'
+import { camposUsados, normalizarDefinicao, type DadosRelatorio } from '#shared/utils/relatorios'
 
 /** A senha é mostrada com traços e pode ser digitada sem eles, em minúsculas. */
 function limparSenha(v: unknown): string {
@@ -45,12 +45,22 @@ export default defineEventHandler(async (event) => {
   ])
   if (!relatorio) throw recusa()
 
-  const definicao = normalizarDefinicao((relatorio as any).definicao)
-  const dados = await montarDadosRelatorio(admin, acesso.empresa_id, {
-    fontes: definicao.fontes,
-    clienteId: acesso.cliente_id,
-    campos: camposUsados(definicao)
-  })
+  let definicao = normalizarDefinicao((relatorio as any).definicao)
+  let dados: DadosRelatorio
+  if (definicao.fontes.includes('importacao')) {
+    // só os arquivos do cliente do acesso; se o conjunto foi apagado, o painel abre sem dados
+    const fonte = await fonteImportacaoAtual(admin, acesso.empresa_id, definicao.importacao)
+    if (fonte) definicao = normalizarDefinicao(definicao, definicao.fontes, fonte)
+    dados = fonte
+      ? await montarDadosImportacao(admin, acesso.empresa_id, definicao, fonte, acesso.cliente_id)
+      : { pedidos: [], itens: [], linhas: [] }
+  } else {
+    dados = await montarDadosRelatorio(admin, acesso.empresa_id, {
+      fontes: definicao.fontes,
+      clienteId: acesso.cliente_id,
+      campos: camposUsados(definicao)
+    })
+  }
 
   // contador de uso pro admin — se falhar, o relatório abre do mesmo jeito
   await admin
