@@ -115,7 +115,10 @@ export const CAMPOS_RELATORIO: CampoRelatorio[] = [
   { id: 'produto.fabricante', nome: 'Fabricante', tipo: 'texto', fonte: 'produtos', base: 'item' },
   { id: 'produto.unidade', nome: 'Unidade', tipo: 'texto', fonte: 'produtos', base: 'item' },
   { id: 'produto.ncm', nome: 'NCM', tipo: 'texto', fonte: 'produtos', base: 'item' },
-  { id: 'produto.modelo', nome: 'Modelo', tipo: 'texto', fonte: 'produtos', base: 'item' }
+  { id: 'produto.modelo', nome: 'Modelo', tipo: 'texto', fonte: 'produtos', base: 'item' },
+  { id: 'produto.grupo', nome: 'Grupo', tipo: 'texto', fonte: 'produtos', base: 'item' },
+  { id: 'produto.subgrupo', nome: 'Subgrupo', tipo: 'texto', fonte: 'produtos', base: 'item' },
+  { id: 'produto.montadora', nome: 'Montadora', tipo: 'texto', fonte: 'produtos', base: 'item' }
 ]
 
 const CAMPO_POR_ID = new Map(CAMPOS_RELATORIO.map((c) => [c.id, c]))

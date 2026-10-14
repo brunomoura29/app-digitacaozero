@@ -7,7 +7,9 @@ export default defineEventHandler(async (event) => {
   const produtos = await buscarTudoDaEmpresa(
     admin,
     'produtos',
-    'id, sku, codigo_barras, descricao, modelo, numero_serie, unidade, ncm, ativo, criado_em, marcas(nome), fabricantes(nome)',
+    'id, sku, codigo_barras, descricao, modelo, numero_serie, unidade, ncm, ativo, criado_em, marcas(nome), fabricantes(nome), ' +
+      'origem, oem, aplicacao, peso, altura, largura, comprimento, caixa_master, qtd_minima_venda, ipi, ' +
+      'montadoras(nome), grupos(nome), subgrupos(nome)',
     empresaId,
     'descricao'
   )
@@ -26,7 +28,21 @@ export default defineEventHandler(async (event) => {
       'Marca',
       'Fabricante',
       'Ativo',
-      'Criado em'
+      'Criado em',
+      // colunas novas sempre no fim: quem já consome o link não muda de posição
+      'Origem',
+      'Montadora',
+      'OEM',
+      'Grupo',
+      'Subgrupo',
+      'Aplicação',
+      'Peso (kg)',
+      'Altura (cm)',
+      'Largura (cm)',
+      'Comprimento (cm)',
+      'Caixa master',
+      'Qtd. mínima de venda',
+      '% IPI'
     ],
     produtos.map((p) => [
       p.id,
@@ -40,7 +56,20 @@ export default defineEventHandler(async (event) => {
       p.marcas?.nome,
       p.fabricantes?.nome,
       p.ativo,
-      String(p.criado_em).slice(0, 10)
+      String(p.criado_em).slice(0, 10),
+      p.origem,
+      p.montadoras?.nome,
+      p.oem,
+      p.grupos?.nome,
+      p.subgrupos?.nome,
+      p.aplicacao,
+      p.peso,
+      p.altura,
+      p.largura,
+      p.comprimento,
+      p.caixa_master,
+      p.qtd_minima_venda,
+      p.ipi
     ]),
     'Produtos'
   )

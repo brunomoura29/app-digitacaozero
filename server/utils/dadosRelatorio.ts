@@ -88,7 +88,7 @@ export async function montarDadosRelatorio(
     const lista = await buscarTudoDaEmpresa(
       admin,
       'produtos',
-      'id, sku, descricao, unidade, ncm, modelo, marcas(nome), fabricantes(nome)',
+      'id, sku, descricao, unidade, ncm, modelo, marcas(nome), fabricantes(nome), grupos(nome), subgrupos(nome), montadoras(nome)',
       empresaId,
       'criado_em'
     )
@@ -100,7 +100,10 @@ export async function montarDadosRelatorio(
         'produto.fabricante': p.fabricantes?.nome ?? null,
         'produto.unidade': p.unidade,
         'produto.ncm': p.ncm,
-        'produto.modelo': p.modelo
+        'produto.modelo': p.modelo,
+        'produto.grupo': p.grupos?.nome ?? null,
+        'produto.subgrupo': p.subgrupos?.nome ?? null,
+        'produto.montadora': p.montadoras?.nome ?? null
       })
     }
   }

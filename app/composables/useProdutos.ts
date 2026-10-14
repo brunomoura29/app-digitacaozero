@@ -1,7 +1,10 @@
 import type { Produto, ProdutoFiltros, ProdutoInput } from '~/types/produto'
 
 const COLUNAS =
-  'id, empresa_id, sku, codigo_barras, descricao, marca_id, fabricante_id, modelo, numero_serie, unidade, ncm, ativo, criado_em, atualizado_em, marcas(nome), fabricantes(nome)'
+  'id, empresa_id, sku, codigo_barras, descricao, marca_id, fabricante_id, modelo, numero_serie, unidade, ncm, ' +
+  'origem, montadora_id, oem, grupo_id, subgrupo_id, aplicacao, peso, altura, largura, comprimento, ' +
+  'caixa_master, qtd_minima_venda, ipi, ativo, criado_em, atualizado_em, ' +
+  'marcas(nome), fabricantes(nome), montadoras(nome), grupos(nome), subgrupos(nome)'
 
 /**
  * CRUD de produtos. Estado compartilhado via `useState` (SSR-safe) —
