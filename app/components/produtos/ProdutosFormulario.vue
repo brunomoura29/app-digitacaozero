@@ -10,19 +10,23 @@
         <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Identificação</p>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-6">
-          <div class="sm:col-span-4">
-            <BaseInput
-              v-model="form.descricao"
-              label="Descrição do produto *"
-              type="text"
-              placeholder="Nome / descrição do produto"
-              icon="heroicons:cube"
-              required
-              :error="erros.descricao"
-            />
-          </div>
-          <div class="sm:col-span-2 flex items-end pb-2">
-            <BaseSwitch v-model="form.ativo" :label="form.ativo ? 'Ativo' : 'Inativo'" />
+          <!-- descrição vai até a borda direita, com o Ativo no fim da mesma linha -->
+          <div class="flex items-end gap-4 sm:col-span-6">
+            <div class="min-w-0 flex-1">
+              <BaseInput
+                v-model="form.descricao"
+                label="Descrição do produto"
+                type="text"
+                placeholder="Nome / descrição do produto"
+                icon="heroicons:cube"
+                required
+                :error="erros.descricao"
+              />
+            </div>
+            <!-- largura fixa: trocar Ativo/Inativo não mexe no tamanho do campo -->
+            <div class="w-24 shrink-0 pb-2">
+              <BaseSwitch v-model="form.ativo" :label="form.ativo ? 'Ativo' : 'Inativo'" />
+            </div>
           </div>
 
           <div class="sm:col-span-2">
@@ -157,8 +161,8 @@
       <section class="space-y-4">
         <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Fiscal</p>
 
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-6">
-          <div class="sm:col-span-6">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
             <label for="produto-origem" class="mb-1 block">Origem</label>
             <select
               id="produto-origem"
@@ -169,10 +173,10 @@
               <option v-for="o in ORIGENS_PRODUTO" :key="o.valor" :value="o.valor">{{ o.label }}</option>
             </select>
           </div>
-          <div class="sm:col-span-3">
+          <div>
             <BaseInput v-model="form.ncm" label="NCM" type="text" placeholder="0000.00.00" icon="heroicons:document-text" />
           </div>
-          <div class="sm:col-span-3">
+          <div>
             <BaseInput
               v-model="form.ipi"
               label="% IPI"
@@ -309,14 +313,6 @@ watch(
 )
 
 const erros = reactive<{ descricao?: string } & Partial<Record<CampoNumerico, string>>>({})
-
-/** "1.234,5" ou "1234.5" → 1234.5; vazio → null; texto que não é número → NaN. */
-function textoParaNumero(texto: string): number | null {
-  const t = texto.trim().replace(/\s/g, '')
-  if (!t) return null
-  const normalizado = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t
-  return /^\d+(\.\d+)?$/.test(normalizado) ? Number(normalizado) : NaN
-}
 
 function validar() {
   if (!form.descricao || form.descricao.trim().length === 0) {

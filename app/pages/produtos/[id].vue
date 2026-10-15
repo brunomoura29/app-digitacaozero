@@ -1,7 +1,5 @@
 <template>
   <div>
-    <BasePageHeader title="Editar produto" :subtitle="produto?.descricao" />
-
     <div v-if="pending" class="flex items-center gap-2 py-14 text-sm text-shift3-text-muted">
       <BaseSpinner size="md" /> Carregando…
     </div>
