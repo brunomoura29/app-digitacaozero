@@ -11,6 +11,16 @@ const LIMITE_CONSULTA = 1000
 
 export const PRODUTOS_POR_PAGINA_OPCOES = [25, 50, 100] as const
 
+/** Catálogo baixado há menos que isso é reaproveitado por quem só precisa "ter" o catálogo. */
+const VALIDADE_CATALOGO_MS = 5 * 60 * 1000
+
+/**
+ * Download do catálogo em andamento — quem pedir enquanto ele corre espera o mesmo, em vez de
+ * baixar de novo (cada linha de item do pedido tem uma busca de produto, e cada uma pedia o
+ * catálogo inteiro ao aparecer: 20 itens = 20 downloads ao mesmo tempo).
+ */
+let catalogoEmAndamento: Promise<void> | null = null
+
 /**
  * CRUD de produtos. Estado compartilhado via `useState` (SSR-safe).
  * Dois estados separados:
@@ -23,6 +33,7 @@ export function useProdutos() {
 
   const itens = useState<Produto[]>('produtos:itens', () => [])
   const carregando = useState<boolean>('produtos:carregando', () => false)
+  const catalogoCarregadoEm = useState<number>('produtos:catalogo:em', () => 0)
   const filtros = useState<ProdutoFiltros>('produtos:filtros', () => ({ q: '', ativo: 'todos' }))
 
   const paginaItens = useState<Produto[]>('produtos:pagina:itens', () => [])
@@ -31,8 +42,22 @@ export function useProdutos() {
   const total = useState<number>('produtos:pagina:total', () => 0)
   const carregandoPagina = useState<boolean>('produtos:pagina:carregando', () => false)
 
-  /** Catálogo inteiro da empresa (sem filtro), em blocos de 1000. */
-  async function carregar() {
+  /** Catálogo inteiro da empresa (sem filtro), em blocos de 1000. Sempre busca de novo (mas não em dobro). */
+  function carregar(): Promise<void> {
+    catalogoEmAndamento ??= baixarCatalogo().finally(() => {
+      catalogoEmAndamento = null
+    })
+    return catalogoEmAndamento
+  }
+
+  /** Só garante que o catálogo está na memória — reaproveita o que foi baixado há pouco. */
+  function garantirCatalogo(): Promise<void> {
+    const recente = Date.now() - catalogoCarregadoEm.value < VALIDADE_CATALOGO_MS
+    if (itens.value.length && recente) return Promise.resolve()
+    return carregar()
+  }
+
+  async function baixarCatalogo() {
     carregando.value = true
     try {
       const todos: Produto[] = []
@@ -48,6 +73,7 @@ export function useProdutos() {
         if (!data || data.length < LIMITE_CONSULTA) break
       }
       itens.value = todos
+      catalogoCarregadoEm.value = Date.now()
     } finally {
       carregando.value = false
     }
@@ -170,6 +196,7 @@ export function useProdutos() {
     carregando,
     filtros,
     carregar,
+    garantirCatalogo,
     paginaItens,
     paginaAtual,
     porPagina,

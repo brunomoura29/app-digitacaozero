@@ -86,7 +86,7 @@
                 min="0"
                 :disabled="disabled"
                 class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:bg-shift3-border/30 disabled:text-shift3-text-muted"
-                @input="(e) => atualizar(idx, { quantidade: Number((e.target as HTMLInputElement).value) || 0 })"
+                @input="(e) => mudarQuantidade(idx, Number((e.target as HTMLInputElement).value) || 0)"
               />
             </td>
             <td class="px-3 py-2 align-top">
@@ -97,8 +97,11 @@
                 min="0"
                 :disabled="disabled"
                 class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-2 py-1.5 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:bg-shift3-border/30 disabled:text-shift3-text-muted"
-                @input="(e) => atualizar(idx, { preco_unitario: Number((e.target as HTMLInputElement).value) || 0 })"
+                @input="(e) => mudarPrecoAMao(idx, Number((e.target as HTMLInputElement).value) || 0)"
               />
+              <p v-if="origemPreco(linha)" class="mt-1 text-xs" :class="linha.politica_id ? 'text-shift3-teal' : 'text-shift3-text-muted'">
+                {{ origemPreco(linha) }}
+              </p>
               <div v-if="!disabled && semPreco.has(linha._id) && !precoSalvo.has(linha._id)" class="mt-1 space-y-1">
                 <p class="text-xs text-shift3-text-muted">Sem preço cadastrado pra esse produto na fábrica/lista escolhida.</p>
                 <label v-if="linha.produto_id" class="flex items-center gap-1.5 text-xs text-shift3-text-secondary">
@@ -204,6 +207,7 @@ import { IDENTIFICADORES_PRODUTO } from '~/types/modelo'
 import type { IdentificadorProduto } from '~/types/modelo'
 import { normalizarCodigo, produtosPorCodigo } from '~/types/pedido'
 import type { PedidoItemInput } from '~/types/pedido'
+import type { PoliticaCliente } from '~/types/politica'
 
 type LinhaEditavel = PedidoItemInput & { _id: string }
 
@@ -222,6 +226,10 @@ const props = defineProps<{
   identificador?: IdentificadorProduto
   /** Busca o preço de tabela dos itens que já chegam com produto (importação) — não usar em pedido salvo, sobrescreveria o preço gravado. */
   precoAoCarregar?: boolean
+  /** Cliente do pedido — as políticas comerciais dele (na fábrica do pedido) ajustam o preço de tabela. */
+  clienteId?: string | null
+  /** Data do pedido (AAAA-MM-DD…) — decide se a política ainda vale. Sem ela, hoje. */
+  dataPedido?: string | null
 }>()
 const emit = defineEmits<{ 'update:modelValue': [itens: PedidoItemInput[]] }>()
 
@@ -238,8 +246,24 @@ const rascunhosLote = ref<{ linhaId: string; sku: string; descricao: string }[]>
 const salvandoPrecoLinha = ref<Set<string>>(new Set())
 const precoSalvo = ref<Set<string>>(new Set())
 
+/**
+ * Linhas com preço digitado à mão (o preço não é o da tabela com a política) — mudar a
+ * quantidade não recalcula essas. Fica fora da linha pra não ir pro banco.
+ */
+const precoManual = ref<Set<string>>(new Set())
+
 function comId(itens: PedidoItemInput[]): LinhaEditavel[] {
-  return itens.map((item) => ({ ...item, _id: crypto.randomUUID() }))
+  const linhas = itens.map((item) => ({ ...item, _id: crypto.randomUUID() }))
+  precoManual.value = new Set(
+    linhas
+      .filter((l) => {
+        if (l.preco_tabela == null) return false
+        const esperado = l.politica_percentual != null ? aplicarPercentual(l.preco_tabela, l.politica_percentual) : l.preco_tabela
+        return Math.abs(esperado - l.preco_unitario) >= 0.005
+      })
+      .map((l) => l._id)
+  )
+  return linhas
 }
 
 const linhas = ref<LinhaEditavel[]>(comId(props.modelValue))
@@ -277,21 +301,112 @@ function atualizar(idx: number, parcial: Partial<PedidoItemInput>) {
   emitir()
 }
 
-/** Busca o preço mais recente na fábrica/lista do pedido e aplica na linha, se ainda for válido. */
+// ───── políticas comerciais do cliente ─────
+
+const servicoPoliticas = usePoliticasCliente()
+const politicas = ref<PoliticaCliente[]>([])
+let politicasProntas: Promise<void> = Promise.resolve()
+let catalogoPronto: Promise<void> | null = null
+
+/** Recarrega as políticas do cliente na fábrica do pedido. Quem aplica preço espera `politicasProntas`. */
+function carregarPoliticas() {
+  const cliente = props.clienteId
+  const fabrica = props.fabricaId
+  if (!cliente || !fabrica) {
+    politicas.value = []
+    politicasProntas = Promise.resolve()
+    return
+  }
+  politicasProntas = servicoPoliticas
+    .doClienteNaFabrica(cliente, fabrica)
+    .then((lista) => {
+      // trocou de cliente/fábrica enquanto buscava: essa resposta já não vale
+      if (props.clienteId === cliente && props.fabricaId === fabrica) politicas.value = lista
+    })
+    .catch(() => {
+      politicas.value = []
+    })
+}
+
+/** % IPI do cadastro do produto — o item guarda o da época (mudar o cadastro depois não mexe no pedido). */
+function ipiDoProduto(produtoId: string | null): number | null {
+  if (!produtoId) return null
+  const ipi = produtos.itens.value.find((p) => p.id === produtoId)?.ipi
+  return ipi == null ? null : Number(ipi)
+}
+
+/** O grupo do produto vem do catálogo — garante que ele foi carregado antes de aplicar política por grupo. */
+function garantirCatalogo(): Promise<void> {
+  catalogoPronto ??= produtos.garantirCatalogo().catch(() => {})
+  return catalogoPronto
+}
+
+const dataReferencia = computed(() => props.dataPedido?.slice(0, 10) || hojeLocal())
+
+/** Preço final + anotação da política pra esse produto/quantidade a partir do preço de tabela. */
+function precoComPolitica(produtoId: string, quantidade: number, precoTabela: number): Partial<PedidoItemInput> {
+  const grupoId = produtos.itens.value.find((p) => p.id === produtoId)?.grupo_id ?? null
+  const aplicada = resolverPolitica(politicas.value, { id: produtoId, grupo_id: grupoId }, quantidade, dataReferencia.value)
+  if (!aplicada) return { preco_unitario: precoTabela, politica_id: null, politica_percentual: null }
+  return {
+    preco_unitario: aplicarPercentual(precoTabela, aplicada.percentual),
+    politica_id: aplicada.politica.id,
+    politica_percentual: aplicada.percentual
+  }
+}
+
+/** Quantidade mudou: política por quantidade pode cair noutra faixa — recalcula (se o preço não foi digitado à mão). */
+function mudarQuantidade(idx: number, quantidade: number) {
+  atualizar(idx, { quantidade })
+  const linha = linhas.value[idx]
+  if (!linha?.produto_id || linha.preco_tabela == null || precoManual.value.has(linha._id)) return
+  atualizar(idx, precoComPolitica(linha.produto_id, quantidade, linha.preco_tabela))
+}
+
+/** Preço digitado: vale o que a pessoa escreveu — sai da política, mas guarda o preço de tabela pra referência. */
+function mudarPrecoAMao(idx: number, preco: number) {
+  const linha = linhas.value[idx]
+  if (!linha) return
+  precoManual.value.add(linha._id)
+  atualizar(idx, { preco_unitario: preco, politica_id: null, politica_percentual: null })
+}
+
+const formatarMoeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+/** Texto embaixo do preço: de onde ele saiu. Nada quando é o preço de tabela puro. */
+function origemPreco(linha: LinhaEditavel): string | null {
+  if (linha.preco_tabela == null) return null
+  const tabela = `Tabela ${formatarMoeda(linha.preco_tabela)}`
+  if (linha.politica_id && linha.politica_percentual != null) {
+    const politica = politicas.value.find((p) => p.id === linha.politica_id)
+    return `${tabela} · ${rotuloPercentual(linha.politica_percentual)}${politica ? ` (${rotuloAlcance(politica)})` : ''}`
+  }
+  if (Math.abs(linha.preco_tabela - linha.preco_unitario) >= 0.005) return `${tabela} · preço alterado à mão`
+  return null
+}
+
+/** Busca o preço mais recente na fábrica/lista do pedido, aplica a política do cliente e grava na linha, se ainda for válida. */
 async function buscarEAplicarPreco(linhaId: string, produtoId: string) {
   if (!props.fabricaId) return
   semPreco.value.delete(linhaId)
   precoSalvo.value.delete(linhaId)
 
   try {
-    const valor = await precos.buscarAtual(produtoId, props.fabricaId, props.referenciaId ?? null)
+    const [valor] = await Promise.all([
+      precos.buscarAtual(produtoId, props.fabricaId, props.referenciaId ?? null),
+      politicasProntas,
+      garantirCatalogo()
+    ])
     // a linha pode ter mudado de produto (ou sido removida) enquanto a busca corria
     const idxAtual = linhas.value.findIndex((l) => l._id === linhaId)
-    if (idxAtual === -1 || linhas.value[idxAtual]?.produto_id !== produtoId) return
+    const linha = linhas.value[idxAtual]
+    if (idxAtual === -1 || !linha || linha.produto_id !== produtoId) return
 
+    precoManual.value.delete(linhaId)
     if (valor != null) {
-      atualizar(idxAtual, { preco_unitario: valor })
+      atualizar(idxAtual, { preco_tabela: valor, ...precoComPolitica(produtoId, linha.quantidade, valor) })
     } else {
+      atualizar(idxAtual, { preco_tabela: null, politica_id: null, politica_percentual: null })
       semPreco.value.add(linhaId)
     }
   } catch {
@@ -338,12 +453,16 @@ async function salvarPrecoNaTabela(idx: number) {
 /** Ao trocar o produto da linha, busca o preço mais recente na fábrica/lista do pedido. */
 async function onProdutoSelecionado(idx: number, produtoId: string | null) {
   // escolha feita à mão deixa de ser "correspondido" — some o aviso de código duplicado
-  atualizar(idx, { produto_id: produtoId, status_match: 'manual' })
+  atualizar(idx, { produto_id: produtoId, status_match: 'manual', ipi: ipiDoProduto(produtoId) })
   const linhaId = linhas.value[idx]?._id
   if (!linhaId) return
   semPreco.value.delete(linhaId)
   if (produtoId) selecionados.value.delete(linhaId) // já tem produto — sai da lista de "sem cadastro"
-  if (!produtoId) return
+  if (!produtoId) {
+    precoManual.value.delete(linhaId)
+    atualizar(idx, { preco_tabela: null, politica_id: null, politica_percentual: null })
+    return
+  }
 
   await buscarEAplicarPreco(linhaId, produtoId)
 }
@@ -362,6 +481,14 @@ function qtdComMesmoCodigo(linha: LinhaEditavel): number {
 }
 
 onMounted(() => {
+  carregarPoliticas()
+  if (props.precoAoCarregar) {
+    garantirCatalogo().then(() => {
+      linhas.value.forEach((linha, idx) => {
+        if (linha.produto_id && linha.ipi == null) atualizar(idx, { ipi: ipiDoProduto(linha.produto_id) })
+      })
+    })
+  }
   if (!props.precoAoCarregar || !props.fabricaId) return
   for (const linha of linhas.value) {
     if (linha.produto_id) buscarEAplicarPreco(linha._id, linha.produto_id)
@@ -436,7 +563,7 @@ async function confirmarCadastroLote() {
       if (!produto) return
       const idx = linhas.value.findIndex((l) => l._id === rascunho.linhaId)
       if (idx === -1) return
-      atualizar(idx, { produto_id: produto.id, status_match: 'correspondido' })
+      atualizar(idx, { produto_id: produto.id, status_match: 'correspondido', ipi: null })
       selecionados.value.delete(rascunho.linhaId)
       buscarEAplicarPreco(rascunho.linhaId, produto.id)
     })
@@ -450,12 +577,13 @@ async function confirmarCadastroLote() {
   }
 }
 
-// se a fábrica/referência do pedido mudar DEPOIS de itens já terem produto selecionado
-// (ordem comum: usuário mexe na tabela antes de escolher a fábrica lá em cima), refaz a
-// busca de preço pra essas linhas — senão elas ficam presas no valor da extração.
+// se a fábrica/referência (ou o cliente, que muda as políticas) mudar DEPOIS de itens já terem
+// produto selecionado (ordem comum: usuário mexe na tabela antes de escolher a fábrica lá em
+// cima), refaz a busca de preço pra essas linhas — senão elas ficam presas no valor anterior.
 watch(
-  () => [props.fabricaId, props.referenciaId],
+  () => [props.fabricaId, props.referenciaId, props.clienteId],
   () => {
+    carregarPoliticas()
     if (props.disabled) return
     for (const linha of linhas.value) {
       if (linha.produto_id) buscarEAplicarPreco(linha._id, linha.produto_id)
@@ -472,7 +600,11 @@ function adicionar() {
     descricao: '',
     quantidade: 1,
     preco_unitario: 0,
-    status_match: 'manual'
+    status_match: 'manual',
+    preco_tabela: null,
+    politica_id: null,
+    politica_percentual: null,
+    ipi: null
   })
   emitir()
 }
@@ -483,6 +615,7 @@ function remover(idx: number) {
     selecionados.value.delete(linhaId)
     semPreco.value.delete(linhaId)
     precoSalvo.value.delete(linhaId)
+    precoManual.value.delete(linhaId)
   }
   linhas.value.splice(idx, 1)
   emitir()

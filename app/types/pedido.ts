@@ -16,6 +16,13 @@ export interface PedidoItem {
   total_linha: number
   status_match: StatusMatchItem
   posicao: number
+  /** Preço que veio da tabela de preço, antes da política do cliente. */
+  preco_tabela: number | null
+  politica_id: string | null
+  /** % aplicado pela política (com sinal: negativo = desconto). */
+  politica_percentual: number | null
+  /** % IPI do produto quando ele foi escolhido no pedido (informativo, fora do total). */
+  ipi: number | null
 }
 
 export interface Pedido {
@@ -54,6 +61,11 @@ export interface PedidoItemInput {
   quantidade: number
   preco_unitario: number
   status_match: StatusMatchItem
+  /** De onde saiu o preço (ver `PedidoItem`) — opcional: item sem produto/tabela não tem. */
+  preco_tabela?: number | null
+  politica_id?: string | null
+  politica_percentual?: number | null
+  ipi?: number | null
 }
 
 /** Payload pra RPC `criar_pedido` — cabeçalho + itens numa tacada só (atômico). */

@@ -194,6 +194,7 @@
           :fabrica-id="fabricaId"
           :referencia-id="referenciaId"
           :identificador="identificador"
+          :cliente-id="clienteId"
           preco-ao-carregar
         />
       </section>

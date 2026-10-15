@@ -43,3 +43,6 @@ export interface ClienteFiltros {
   q: string
   ativo: ClienteFiltroAtivo
 }
+
+/** Abas da tela do cliente. */
+export type AbaCliente = 'dados' | 'politicas'

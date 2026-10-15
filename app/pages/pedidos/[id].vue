@@ -76,6 +76,8 @@
           :disabled="!podeEditar"
           :fabrica-id="form.fabrica_id"
           :referencia-id="form.referencia_id"
+          :cliente-id="pedido.cliente_id"
+          :data-pedido="pedido.data_emissao"
         />
       </section>
 

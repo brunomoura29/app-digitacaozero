@@ -61,7 +61,23 @@ export function usePedidos() {
       p_referencia_id: dados.referencia_id
     })
     if (error) throw error
-    return data as string
+    const id = data as string
+
+    // o `criar_pedido` não grava preço de tabela/política/IPI dos itens — anota logo em seguida.
+    // Se falhar, o pedido já está certo (os preços finais foram gravados); só perde a anotação.
+    if (dados.itens.some((i) => i.preco_tabela != null || i.politica_id || i.ipi != null)) {
+      const { error: erroPrecos } = await supabase.rpc('registrar_precos_itens', {
+        p_pedido_id: id,
+        p_itens: dados.itens.map((i) => ({
+          preco_tabela: i.preco_tabela ?? null,
+          politica_id: i.politica_id ?? null,
+          politica_percentual: i.politica_percentual ?? null,
+          ipi: i.ipi ?? null
+        }))
+      })
+      if (erroPrecos) console.warn('Não foi possível anotar preço de tabela/política nos itens:', erroPrecos)
+    }
+    return id
   }
 
   async function atualizar(id: string, dados: Partial<Pedido>): Promise<void> {

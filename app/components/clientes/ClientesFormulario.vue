@@ -102,7 +102,7 @@
          o @submit mesmo estando fora da árvore do <form> no DOM. -->
     <ClientOnly>
       <Teleport to="#dashboard-footer">
-        <div class="border-t border-shift3-border bg-shift3-bg-card px-6 py-4">
+        <div v-if="mostrarAcoes" class="border-t border-shift3-border bg-shift3-bg-card px-6 py-4">
           <div class="mx-auto flex max-w-3xl items-center gap-3">
             <BaseButton
               type="submit"
@@ -133,8 +133,10 @@ const props = withDefaults(
     cliente?: Cliente | null
     salvando?: boolean
     modo?: 'novo' | 'editar'
+    /** Barra de Salvar/Cancelar no rodapé — escondida quando outra aba da tela está aberta. */
+    mostrarAcoes?: boolean
   }>(),
-  { cliente: null, salvando: false, modo: 'novo' }
+  { cliente: null, salvando: false, modo: 'novo', mostrarAcoes: true }
 )
 
 const emit = defineEmits<{

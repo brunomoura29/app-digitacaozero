@@ -16,20 +16,27 @@
       </BaseEmptyState>
     </div>
 
-    <ClientesFormulario
-      v-if="!pending && cliente"
-      modo="editar"
-      :cliente="cliente"
-      :salvando="salvando"
-      @submit="salvar"
-      @cancelar="navigateTo('/clientes')"
-    />
+    <template v-if="!pending && cliente">
+      <ClientesAbas v-model="aba" />
+
+      <!-- v-show: trocar de aba não perde o que foi digitado nos dados -->
+      <ClientesFormulario
+        v-show="aba === 'dados'"
+        modo="editar"
+        :cliente="cliente"
+        :salvando="salvando"
+        :mostrar-acoes="aba === 'dados'"
+        @submit="salvar"
+        @cancelar="navigateTo('/clientes')"
+      />
+      <ClientesPoliticas v-if="aba === 'politicas'" :cliente-id="cliente.id" />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { Cliente, ClienteInput } from '~/types/cliente'
+import type { AbaCliente, Cliente, ClienteInput } from '~/types/cliente'
 
 definePageMeta({ layout: 'dashboard', title: 'Editar cliente', backTo: '/clientes' })
 
@@ -41,6 +48,8 @@ const id = route.params.id as string
 const cliente = ref<Cliente | null>(null)
 const pending = ref(true)
 const salvando = ref(false)
+// ?aba=politicas abre direto na aba de políticas
+const aba = ref<AbaCliente>(route.query.aba === 'politicas' ? 'politicas' : 'dados')
 
 onMounted(async () => {
   try {
