@@ -13,111 +13,191 @@
     <!-- ───── Formulário (nova / edição) ───── -->
     <form
       v-if="editando"
-      class="space-y-5 rounded-medium border border-shift3-teal/40 bg-shift3-bg-light p-5"
+      class="overflow-hidden rounded-medium border border-shift3-border bg-shift3-bg-card shadow-sm"
       @submit.prevent="salvar"
     >
-      <p class="font-semibold text-shift3-text">{{ editando.id ? 'Editar política' : 'Nova política' }}</p>
-
-      <BaseBuscaOuCria
-        v-model="editando.fabrica_id"
-        label="Fábrica *"
-        placeholder="Buscar fábrica ou digitar pra criar…"
-        :itens="fabricas.itens.value"
-        :carregando="fabricas.carregando.value"
-        :ao-criar="(nome) => fabricas.criar(nome)"
-      />
-
-      <div class="space-y-2">
-        <label class="block">Vale para</label>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="o in OPCOES_ALCANCE"
-            :key="o.valor"
-            type="button"
-            class="rounded-lg px-3 py-2 text-xs font-medium transition"
-            :class="editando.alcance === o.valor ? 'bg-shift3-teal text-white' : 'bg-shift3-border/40 text-shift3-text hover:bg-shift3-border/60'"
-            @click="editando.alcance = o.valor"
-          >
-            {{ o.label }}
-          </button>
+      <!-- cabeçalho do cartão: título à esquerda, situação à direita -->
+      <div class="flex items-center justify-between gap-4 border-b border-shift3-border bg-shift3-bg-light px-5 py-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-shift3-teal/10 text-shift3-teal">
+            <Icon name="heroicons:receipt-percent" class="h-4 w-4" />
+          </span>
+          <p class="font-semibold text-shift3-text">{{ editando.id ? 'Editar política' : 'Nova política' }}</p>
         </div>
-        <BaseBuscaOuCria
-          v-if="editando.alcance === 'grupo'"
-          v-model="editando.grupo_id"
-          placeholder="Buscar grupo…"
-          :itens="grupos.itens.value"
-          :carregando="grupos.carregando.value"
-          :ao-criar="(nome) => grupos.criar(nome)"
-        />
-        <ProdutosProdutoPicker v-else-if="editando.alcance === 'produto'" v-model="editando.produto_id" hide-label />
+        <BaseSwitch v-model="editando.ativo" :label="editando.ativo ? 'Ativa' : 'Inativa'" />
       </div>
 
-      <div class="space-y-2">
-        <label class="block">Regra</label>
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            v-for="o in OPCOES_TIPO"
-            :key="o.valor"
-            type="button"
-            class="rounded-lg px-3 py-2 text-xs font-medium transition"
-            :class="editando.tipo === o.valor ? 'bg-shift3-teal text-white' : 'bg-shift3-border/40 text-shift3-text hover:bg-shift3-border/60'"
-            @click="editando.tipo = o.valor"
-          >
-            {{ o.label }}
-          </button>
-          <select v-model="editando.direcao" :class="SELECT" class="ml-auto w-36">
-            <option value="desconto">Desconto</option>
-            <option value="acrescimo">Acréscimo</option>
-          </select>
-        </div>
+      <div class="space-y-6 px-5 py-5">
+        <!-- ───── Onde vale ───── -->
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <BaseBuscaOuCria
+            v-model="editando.fabrica_id"
+            label="Fábrica *"
+            placeholder="Buscar ou criar fábrica…"
+            :itens="fabricas.itens.value"
+            :carregando="fabricas.carregando.value"
+            :ao-criar="(nome) => fabricas.criar(nome)"
+          />
 
-        <div v-if="editando.tipo === 'percentual'" class="w-40">
-          <BaseInput v-model="editando.percentual" label="%" inputmode="decimal" placeholder="10" :error="erros.percentual" />
-        </div>
-
-        <div v-else class="space-y-2">
-          <div v-for="(f, i) in editando.faixas" :key="i" class="flex items-end gap-2">
-            <div class="w-40">
-              <BaseInput v-model="f.a_partir_de" :label="i === 0 ? 'A partir de (un.)' : undefined" inputmode="decimal" placeholder="1" />
+          <div>
+            <label class="mb-2 block">Vale para</label>
+            <div :class="SEGMENTADO">
+              <button
+                v-for="o in OPCOES_ALCANCE"
+                :key="o.valor"
+                type="button"
+                :class="[SEGMENTO, editando.alcance === o.valor ? SEGMENTO_ATIVO : SEGMENTO_INATIVO]"
+                @click="editando.alcance = o.valor"
+              >
+                <Icon :name="o.icone" class="h-3.5 w-3.5 shrink-0" />
+                {{ o.label }}
+              </button>
             </div>
-            <div class="w-32">
-              <BaseInput v-model="f.percentual" :label="i === 0 ? '%' : undefined" inputmode="decimal" placeholder="5" />
-            </div>
-            <BaseButton
-              v-if="editando.faixas.length > 1"
-              type="button"
-              variant="ghost"
-              size="sm"
-              icon-left="heroicons:trash"
-              class="mb-1 text-danger"
-              aria-label="Remover faixa"
-              @click="editando.faixas.splice(i, 1)"
-            />
           </div>
-          <p v-if="erros.faixas" class="text-xs text-danger">{{ erros.faixas }}</p>
-          <BaseButton type="button" variant="ghost" size="sm" icon-left="heroicons:plus" @click="editando.faixas.push({ a_partir_de: '', percentual: '' })">
-            Adicionar faixa
-          </BaseButton>
-          <p class="text-xs text-shift3-text-muted">Vale a maior faixa que a quantidade do item alcança. Abaixo da primeira, sem ajuste.</p>
-        </div>
+
+          <div v-if="editando.alcance !== 'todos'" class="md:col-span-2">
+            <BaseBuscaOuCria
+              v-if="editando.alcance === 'grupo'"
+              v-model="editando.grupo_id"
+              label="Grupo *"
+              placeholder="Buscar grupo…"
+              :itens="grupos.itens.value"
+              :carregando="grupos.carregando.value"
+              :ao-criar="(nome) => grupos.criar(nome)"
+            />
+            <template v-else>
+              <label class="mb-2 block">Produto *</label>
+              <ProdutosProdutoPicker v-model="editando.produto_id" hide-label />
+            </template>
+          </div>
+        </section>
+
+        <!-- ───── Regra ───── -->
+        <section class="space-y-4 rounded-medium border border-shift3-border/70 p-4">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label class="mb-2 block">Tipo de regra</label>
+              <div :class="SEGMENTADO">
+                <button
+                  v-for="o in OPCOES_TIPO"
+                  :key="o.valor"
+                  type="button"
+                  :class="[SEGMENTO, editando.tipo === o.valor ? SEGMENTO_ATIVO : SEGMENTO_INATIVO]"
+                  @click="editando.tipo = o.valor"
+                >
+                  <Icon :name="o.icone" class="h-3.5 w-3.5 shrink-0" />
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="mb-2 block">Ajuste</label>
+              <div :class="SEGMENTADO">
+                <button
+                  type="button"
+                  :class="[SEGMENTO, editando.direcao === 'desconto' ? SEGMENTO_ATIVO : SEGMENTO_INATIVO]"
+                  @click="editando.direcao = 'desconto'"
+                >
+                  <Icon name="heroicons:arrow-trending-down" class="h-3.5 w-3.5 shrink-0" />
+                  Desconto
+                </button>
+                <button
+                  type="button"
+                  :class="[SEGMENTO, editando.direcao === 'acrescimo' ? SEGMENTO_ATIVO : SEGMENTO_INATIVO]"
+                  @click="editando.direcao = 'acrescimo'"
+                >
+                  <Icon name="heroicons:arrow-trending-up" class="h-3.5 w-3.5 shrink-0" />
+                  Acréscimo
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- % fixo: campo com o "%" dentro + prévia do efeito num preço de exemplo -->
+          <div v-if="editando.tipo === 'percentual'" class="flex flex-wrap items-end gap-4">
+            <div class="w-40">
+              <label class="mb-1 block">{{ editando.direcao === 'desconto' ? 'Desconto' : 'Acréscimo' }}</label>
+              <div class="relative">
+                <input
+                  v-model="editando.percentual"
+                  inputmode="decimal"
+                  placeholder="10"
+                  :class="[CAMPO, 'pr-8 text-right', erros.percentual ? 'border-danger' : '']"
+                />
+                <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-shift3-text-muted">%</span>
+              </div>
+            </div>
+            <p v-if="previa(editando.percentual)" class="pb-2 text-sm text-shift3-text-secondary">
+              Ex.: tabela {{ previa(editando.percentual)!.de }}
+              <Icon name="heroicons:arrow-right" class="mx-1 inline h-3.5 w-3.5 align-[-2px] text-shift3-text-muted" />
+              <span class="font-semibold text-shift3-teal">{{ previa(editando.percentual)!.para }}</span>
+            </p>
+            <p v-if="erros.percentual" class="w-full text-xs text-danger">{{ erros.percentual }}</p>
+          </div>
+
+          <!-- faixas por quantidade: tabelinha compacta -->
+          <div v-else class="space-y-2">
+            <div class="overflow-hidden rounded-default border border-shift3-border">
+              <div class="grid grid-cols-[1fr_1fr_1.4fr_auto] items-center gap-3 bg-shift3-bg-light px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-shift3-text-muted">
+                <span>A partir de</span>
+                <span>{{ editando.direcao === 'desconto' ? 'Desconto' : 'Acréscimo' }}</span>
+                <span>Exemplo (tabela R$ 100,00)</span>
+                <span class="w-8" />
+              </div>
+              <div
+                v-for="(f, i) in editando.faixas"
+                :key="i"
+                class="grid grid-cols-[1fr_1fr_1.4fr_auto] items-center gap-3 border-t border-shift3-border/60 px-3 py-2"
+              >
+                <div class="relative">
+                  <input v-model="f.a_partir_de" inputmode="decimal" placeholder="1" :class="[CAMPO, 'pr-10 text-right']" />
+                  <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-shift3-text-muted">un.</span>
+                </div>
+                <div class="relative">
+                  <input v-model="f.percentual" inputmode="decimal" placeholder="5" :class="[CAMPO, 'pr-8 text-right']" />
+                  <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-shift3-text-muted">%</span>
+                </div>
+                <span class="text-sm" :class="previa(f.percentual) ? 'font-semibold text-shift3-teal' : 'text-shift3-text-muted'">
+                  {{ previa(f.percentual)?.para ?? '—' }}
+                </span>
+                <button
+                  type="button"
+                  class="flex h-8 w-8 items-center justify-center rounded-default text-shift3-text-muted transition hover:bg-danger/10 hover:text-danger disabled:invisible"
+                  :disabled="editando.faixas.length <= 1"
+                  aria-label="Remover faixa"
+                  @click="editando.faixas.splice(i, 1)"
+                >
+                  <Icon name="heroicons:trash" class="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <BaseButton type="button" variant="ghost" size="sm" icon-left="heroicons:plus" @click="editando.faixas.push({ a_partir_de: '', percentual: '' })">
+                Adicionar faixa
+              </BaseButton>
+              <p class="text-xs text-shift3-text-muted">Vale a maior faixa que a quantidade alcança. Abaixo da primeira, sem ajuste.</p>
+            </div>
+            <p v-if="erros.faixas" class="text-xs text-danger">{{ erros.faixas }}</p>
+          </div>
+        </section>
+
+        <!-- ───── Validade e observação ───── -->
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-[14rem_1fr]">
+          <BaseInput v-model="editando.valida_ate" type="date" label="Válida até" hint="Vazio = sem prazo" />
+          <BaseInput v-model="editando.observacao" label="Observação" placeholder="Ex.: acordo comercial de 2026" />
+        </section>
+
+        <p v-if="erros.geral" class="flex items-start gap-2 rounded-default bg-danger/10 px-3 py-2 text-sm text-danger">
+          <Icon name="heroicons:exclamation-circle" class="mt-0.5 h-4 w-4 shrink-0" />
+          {{ erros.geral }}
+        </p>
       </div>
 
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <BaseInput v-model="editando.valida_ate" type="date" label="Válida até" hint="Vazio = sem prazo" />
-        <div class="flex items-end pb-2">
-          <BaseSwitch v-model="editando.ativo" :label="editando.ativo ? 'Ativa' : 'Inativa'" />
-        </div>
-      </div>
-
-      <BaseInput v-model="editando.observacao" label="Observação" placeholder="Ex.: acordo comercial de 2026" />
-
-      <p v-if="erros.geral" class="text-sm text-danger">{{ erros.geral }}</p>
-
-      <div class="flex items-center gap-2">
+      <div class="flex items-center justify-end gap-2 border-t border-shift3-border bg-shift3-bg-light px-5 py-3">
+        <BaseButton type="button" variant="ghost" @click="editando = null">Cancelar</BaseButton>
         <BaseButton type="submit" variant="primary" icon-left="heroicons:check" :loading="salvando">
           {{ editando.id ? 'Salvar política' : 'Adicionar política' }}
         </BaseButton>
-        <BaseButton type="button" variant="ghost" @click="editando = null">Cancelar</BaseButton>
       </div>
     </form>
 
@@ -188,18 +268,34 @@ import { useAuthStore } from '~/stores/auth'
 
 const props = defineProps<{ clienteId: string }>()
 
-const SELECT =
-  'rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20'
+/** Mesmo visual do BaseInput, pros campos com sufixo (% / un.) dentro. */
+const CAMPO =
+  'w-full rounded-default border border-shift3-input-border bg-shift3-input py-2 pl-3 text-sm text-shift3-text outline-none transition placeholder:text-shift3-text-muted focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20'
 
-const OPCOES_ALCANCE: { valor: AlcancePolitica; label: string }[] = [
-  { valor: 'todos', label: 'Todos os produtos' },
-  { valor: 'grupo', label: 'Um grupo' },
-  { valor: 'produto', label: 'Um produto' }
+/** Botões colados num bloco só (controle segmentado), ocupando a largura da coluna. */
+const SEGMENTADO = 'flex w-full rounded-default border border-shift3-input-border bg-shift3-input p-1'
+const SEGMENTO = 'flex flex-1 items-center justify-center gap-1.5 rounded-[6px] px-2 py-1.5 text-xs font-medium transition whitespace-nowrap'
+const SEGMENTO_ATIVO = 'bg-shift3-teal text-white shadow-sm'
+const SEGMENTO_INATIVO = 'text-shift3-text-secondary hover:bg-shift3-border/50 hover:text-shift3-text'
+
+const OPCOES_ALCANCE: { valor: AlcancePolitica; label: string; icone: string }[] = [
+  { valor: 'todos', label: 'Todos', icone: 'heroicons:squares-2x2' },
+  { valor: 'grupo', label: 'Grupo', icone: 'heroicons:folder' },
+  { valor: 'produto', label: 'Produto', icone: 'heroicons:cube' }
 ]
-const OPCOES_TIPO: { valor: TipoPolitica; label: string }[] = [
-  { valor: 'percentual', label: 'Percentual fixo' },
-  { valor: 'quantidade', label: 'Por quantidade' }
+const OPCOES_TIPO: { valor: TipoPolitica; label: string; icone: string }[] = [
+  { valor: 'percentual', label: '% fixo', icone: 'heroicons:receipt-percent' },
+  { valor: 'quantidade', label: 'Por quantidade', icone: 'heroicons:bars-arrow-up' }
 ]
+
+/** Prévia do ajuste num preço de exemplo (R$ 100,00) — mostra o efeito antes de salvar. */
+function previa(texto: string | number): { de: string; para: string } | null {
+  const n = textoParaNumero(String(texto ?? ''))
+  if (n === null || Number.isNaN(n) || n <= 0 || !editando.value) return null
+  const sinal = editando.value.direcao === 'desconto' ? -1 : 1
+  const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  return { de: moeda(100), para: moeda(Math.max(0, aplicarPercentual(100, sinal * n))) }
+}
 
 const auth = useAuthStore()
 const toast = useToast()

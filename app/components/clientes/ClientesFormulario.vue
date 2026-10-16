@@ -7,18 +7,22 @@
       <p class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Dados principais</p>
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-6">
-        <div class="sm:col-span-4">
-          <BaseInput
-            v-model="form.nome"
-            label="Nome / Razão social"
-            placeholder="Nome do cliente"
-            icon="heroicons:user"
-            required
-            :error="errors.nome"
-          />
-        </div>
-        <div class="sm:col-span-2 flex items-end pb-2">
-          <BaseSwitch v-model="form.ativo" :label="form.ativo ? 'Ativo' : 'Inativo'" />
+        <!-- nome vai até a borda direita, com o Ativo no fim da mesma linha (alinhado ao campo de baixo) -->
+        <div class="flex items-end gap-4 sm:col-span-6">
+          <div class="min-w-0 flex-1">
+            <BaseInput
+              v-model="form.nome"
+              label="Nome / Razão social"
+              placeholder="Nome do cliente"
+              icon="heroicons:user"
+              required
+              :error="errors.nome"
+            />
+          </div>
+          <!-- largura fixa: trocar Ativo/Inativo não mexe no tamanho do campo -->
+          <div class="w-24 shrink-0 pb-2">
+            <BaseSwitch v-model="form.ativo" :label="form.ativo ? 'Ativo' : 'Inativo'" />
+          </div>
         </div>
 
         <div class="sm:col-span-3">

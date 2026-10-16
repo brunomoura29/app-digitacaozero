@@ -6,7 +6,7 @@
       <BaseInput
         :model-value="filtros.q"
         type="text"
-        placeholder="Descrição do produto"
+        placeholder="Descrição ou SKU do produto"
         @update:model-value="(v) => (filtros.q = v)"
         @keyup.enter="$emit('filtrar')"
       />

@@ -25,7 +25,7 @@ export function usePrecos() {
         .order('criado_em', { ascending: false })
 
       const termo = filtros.value.q.trim()
-      if (termo) query = query.ilike('produtos.descricao', `%${termo}%`)
+      if (termo) query = query.or(filtroContemEm(['descricao', 'sku'], termo), { referencedTable: 'produtos' })
       if (filtros.value.competencia) query = query.eq('competencia', `${filtros.value.competencia}-01`)
 
       const { data, error } = await query

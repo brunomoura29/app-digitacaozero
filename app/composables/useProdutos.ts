@@ -95,7 +95,7 @@ export function useProdutos() {
           .range((p - 1) * porPagina.value, p * porPagina.value - 1)
 
         const termo = filtros.value.q.trim()
-        if (termo) query = query.ilike('descricao', `%${termo}%`)
+        if (termo) query = query.or(filtroContemEm(['descricao', 'sku', 'oem', 'codigo_barras'], termo))
         if (filtros.value.ativo === 'ativos') query = query.eq('ativo', true)
         if (filtros.value.ativo === 'inativos') query = query.eq('ativo', false)
         return query

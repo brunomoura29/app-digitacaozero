@@ -2,11 +2,11 @@
   <div class="flex gap-3 items-end">
     <!-- Busca por descrição -->
     <div class="w-full max-w-xs">
-      <label class="block text-xs font-medium text-shift3-text-muted mb-1">Buscar por descrição…</label>
+      <label class="block text-xs font-medium text-shift3-text-muted mb-1">Buscar produto…</label>
       <BaseInput
         :model-value="filtros.q"
         type="text"
-        placeholder="Nome do produto"
+        placeholder="Descrição, SKU, OEM ou código de barras"
         @update:model-value="(v) => (filtros.q = v)"
         @keyup.enter="$emit('filtrar')"
       />
