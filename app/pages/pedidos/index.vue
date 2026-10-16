@@ -38,6 +38,7 @@
           :pedidos="itens"
           :pode-mover="auth.podeEditarModulo('pedidos')"
           :pode-excluir="auth.podeExcluirModulo('pedidos')"
+          :destaque="etapaDestaque"
           @mover="moverPedido"
           @link-cliente="(pedido) => (pedidoLinkId = pedido.id)"
           @excluir="(pedido) => (pedidoExcluir = pedido)"
@@ -114,6 +115,14 @@ const auth = useAuthStore()
 const toast = useToast()
 
 onMounted(() => carregar())
+
+// vindo do Dashboard (`?etapa=aprovado`): o Kanban rola até a coluna e pulsa
+const route = useRoute()
+const ETAPAS_VALIDAS: StatusPedido[] = ['rascunho', 'em_validacao', 'em_aprovacao', 'aprovado', 'rejeitado']
+const etapaDestaque = computed(() => {
+  const etapa = route.query.etapa as StatusPedido | undefined
+  return etapa && ETAPAS_VALIDAS.includes(etapa) ? etapa : null
+})
 
 async function sincronizar() {
   try {

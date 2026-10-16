@@ -26,6 +26,19 @@
         <div class="ml-auto hidden w-full max-w-xs sm:block">
           <BasePesquisa v-model="busca" placeholder="Buscar..." />
         </div>
+        <!-- ação principal do produto, sempre à mão (no Dashboard o botão grande já está na tela) -->
+        <BaseButton
+          v-if="mostrarAtalhoImportar"
+          to="/pedidos/novo"
+          variant="accent"
+          size="sm"
+          icon-left="heroicons:arrow-up-tray"
+          class="shrink-0 max-sm:ml-auto"
+          title="Importar novo pedido"
+          aria-label="Importar novo pedido"
+        >
+          <span class="hidden md:inline">Importar pedido</span>
+        </BaseButton>
         <BaseThemeToggle />
         <AppTopbarUser />
       </header>
@@ -58,6 +71,10 @@ const pageTitle = computed(() => (route.meta.title as string) || 'Painel')
 const backTo = computed(() => route.meta.backTo as string | undefined)
 
 const busca = ref('')
+
+const mostrarAtalhoImportar = computed(
+  () => auth.podeIncluirModulo('pedidos') && route.path !== '/' && route.path !== '/pedidos/novo'
+)
 
 const auth = useAuthStore()
 

@@ -6,8 +6,9 @@
     <section
       v-for="col in colunas"
       :key="col.status"
+      :ref="(el) => (colunasEl[col.status] = el as HTMLElement)"
       class="flex min-h-0 min-w-[16rem] flex-1 basis-0 flex-col overflow-hidden rounded-medium border border-shift3-border bg-shift3-bg-light transition"
-      :class="classeColuna(col.status)"
+      :class="[classeColuna(col.status), destaque === col.status && 'animate-pulso-destaque border-shift3-green']"
       @dragover="aoPassarSobre($event, col.status)"
       @drop="soltar($event, col.status)"
     >
@@ -97,6 +98,8 @@ interface Props {
   podeMover?: boolean
   /** Mostra "Excluir pedido" no menu do card. */
   podeExcluir?: boolean
+  /** Coluna aberta pelo Dashboard (`/pedidos?etapa=...`): rola até ela e pulsa. */
+  destaque?: StatusPedido | null
 }
 
 interface Coluna {
@@ -111,7 +114,12 @@ interface Coluna {
   borda_card: string
 }
 
-const props = withDefaults(defineProps<Props>(), { podeMover: false, podeExcluir: false })
+const props = withDefaults(defineProps<Props>(), { podeMover: false, podeExcluir: false, destaque: null })
+
+const colunasEl: Partial<Record<StatusPedido, HTMLElement>> = {}
+onMounted(() => {
+  if (props.destaque) colunasEl[props.destaque]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+})
 const emit = defineEmits<{
   selecionarPedido: [pedido: Pedido]
   mover: [pedido: Pedido, destino: StatusPedido]
