@@ -32,4 +32,6 @@ export interface CabecalhoOC {
   fabrica: string | null
   /** "Informações do pedido" (ver `InformacaoPedido`) — o link público não lê `dados_extras` direto. */
   informacoes?: unknown
+  /** % e valor da condição de pagamento (linha dos totais). */
+  condicao?: { percentual: number | string; valor: number | string } | null
 }

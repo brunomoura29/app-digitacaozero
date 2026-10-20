@@ -88,7 +88,13 @@ export function useCompartilhamentos() {
     if (erroCabecalho) console.error('Erro ao buscar cabeçalho da OC:', erroCabecalho)
 
     // o link público não lê dados_extras: as informações do pedido vêm no cabeçalho da OC
-    if (!erroCabecalho) pedido.dados_extras = { informacoes: (cabecalho as unknown as CabecalhoOC | null)?.informacoes ?? [] }
+    // (e o ajuste da condição de pagamento, que a RPC do pedido não devolve)
+    if (!erroCabecalho) {
+      const oc = cabecalho as unknown as CabecalhoOC | null
+      pedido.dados_extras = { informacoes: oc?.informacoes ?? [] }
+      pedido.condicao_percentual = Number(oc?.condicao?.percentual) || 0
+      pedido.condicao_valor = Number(oc?.condicao?.valor) || 0
+    }
 
     return {
       pedido,

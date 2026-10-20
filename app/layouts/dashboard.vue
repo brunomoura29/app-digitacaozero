@@ -86,6 +86,7 @@ const MODULO_POR_PREFIXO: [string, string][] = [
   ['/vendedores', 'vendedores'],
   ['/produtos', 'produtos'],
   ['/tabela-preco', 'tabela_preco'],
+  ['/condicoes-pagamento', 'condicoes_pagamento'],
   ['/pedidos', 'pedidos'],
   ['/relatorios', 'relatorios']
 ]
@@ -144,7 +145,12 @@ const nav = computed<SidebarItem[]>(() => {
   const cadastros = [
     auth.podeAcessarModulo('clientes') && { label: 'Clientes', icon: 'heroicons:users', to: '/clientes' },
     auth.podeAcessarModulo('vendedores') && { label: 'Vendedores', icon: 'heroicons:user-group', to: '/vendedores' },
-    auth.podeAcessarModulo('produtos') && { label: 'Produtos', icon: 'heroicons:cube', to: '/produtos' }
+    auth.podeAcessarModulo('produtos') && { label: 'Produtos', icon: 'heroicons:cube', to: '/produtos' },
+    auth.podeAcessarModulo('condicoes_pagamento') && {
+      label: 'Condições de pagamento',
+      icon: 'heroicons:banknotes',
+      to: '/condicoes-pagamento'
+    }
   ].filter(Boolean) as SidebarItem['children']
   if (cadastros && cadastros.length) {
     itens.push({ label: 'Cadastros', icon: 'heroicons:inbox-stack', children: cadastros })

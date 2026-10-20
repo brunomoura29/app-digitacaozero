@@ -32,7 +32,25 @@
           <label class="text-xs font-semibold uppercase tracking-wide text-shift3-text-muted">Emissão</label>
           <p class="mt-1 text-sm text-shift3-text">{{ formatData(pedido.data_emissao) }}</p>
         </div>
-        <BaseInput v-model="form.condicao_pagamento" label="Condição de Pagamento" placeholder="à vista, 30 dias..." :disabled="!podeEditar" />
+        <div>
+          <label for="condicao-pagamento" class="mb-1 block text-sm font-medium text-shift3-text">Condição de Pagamento</label>
+          <select
+            id="condicao-pagamento"
+            v-model="form.condicao_pagamento_id"
+            :disabled="!podeEditar || !form.fabrica_id"
+            class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <option value="">{{ textoSemCondicao }}</option>
+            <option v-for="c in condicoesDaFabrica" :key="c.id" :value="c.id">
+              {{ c.nome }}{{ c.percentual ? ` (${rotuloPercentual(c.percentual)})` : '' }}
+            </option>
+          </select>
+          <p v-if="!form.fabrica_id" class="mt-1 text-xs text-shift3-text-muted">Escolha a fábrica abaixo pra ver as condições.</p>
+          <p v-else-if="!condicoesDaFabrica.length" class="mt-1 text-xs text-shift3-text-muted">
+            Essa fábrica não tem condições —
+            <NuxtLink to="/condicoes-pagamento" class="text-shift3-teal hover:underline">cadastre aqui</NuxtLink>.
+          </p>
+        </div>
         <BaseInput v-model="form.prazo_entrega" label="Prazo de Entrega" placeholder="data ou dias" :disabled="!podeEditar" />
         <div />
       </section>
@@ -121,6 +139,12 @@
           <div class="flex justify-between text-sm">
             <span class="text-shift3-text-secondary">Subtotal:</span>
             <span class="text-shift3-text">{{ formatValor(subtotal) }}</span>
+          </div>
+          <div v-if="valorCondicao" class="flex justify-between text-sm">
+            <span class="text-shift3-text-secondary">{{ nomeCondicao }} ({{ rotuloPercentual(percentualCondicao) }}):</span>
+            <span :class="valorCondicao < 0 ? 'font-medium text-shift3-teal' : 'text-shift3-text'">
+              {{ valorCondicao < 0 ? '−' : '+' }} {{ formatValor(Math.abs(valorCondicao)) }}
+            </span>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-shift3-text-secondary">Frete:</span>
@@ -251,7 +275,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
+import { valorDaCondicao } from '~/types/condicaoPagamento'
+import type { CondicaoPagamento } from '~/types/condicaoPagamento'
 import { informacoesDoPedido } from '~/types/pedido'
 import type { InformacaoPedido, Pedido, PedidoItem, StatusPedido } from '~/types/pedido'
 import { useAuthStore } from '~/stores/auth'
@@ -264,10 +290,17 @@ const auth = useAuthStore()
 const toast = useToast()
 const fabricas = useFabricas()
 const referencias = useReferenciasTabela()
+const servicoCondicoes = useCondicoesPagamento()
 
-onMounted(() => {
+onMounted(async () => {
   fabricas.carregar()
   referencias.carregar()
+  try {
+    condicoes.value = await servicoCondicoes.listar()
+  } catch {
+    // sem a lista o seletor fica só com "Sem condição" — o resto do pedido funciona
+    toast.error('Não foi possível carregar as condições de pagamento')
+  }
 })
 
 const id = route.params.id as string
@@ -281,7 +314,8 @@ const confirmandoExcluir = ref(false)
 const excluindo = ref(false)
 
 const form = reactive({
-  condicao_pagamento: '',
+  /** '' = sem condição cadastrada. */
+  condicao_pagamento_id: '',
   prazo_entrega: '',
   desconto_valor: 0,
   frete_valor: 0,
@@ -295,15 +329,55 @@ const form = reactive({
 const podeEditar = computed(() => ['rascunho', 'rejeitado'].includes(pedido.value?.status ?? ''))
 const podeValidar = computed(() => pedido.value?.status === 'rascunho' && auth.isAdmin)
 
+// ───── condição de pagamento ─────
+const condicoes = ref<CondicaoPagamento[]>([])
+/** Condição digitada à mão em pedido antigo (sem cadastro) — fica enquanto não escolherem uma do cadastro. */
+const textoAntigo = ref('')
+const textoSemCondicao = computed(() => (textoAntigo.value ? `Sem condição cadastrada (atual: ${textoAntigo.value})` : 'Sem condição'))
+
+/** As ativas da fábrica do pedido — e a já escolhida, mesmo que tenha sido desativada depois. */
+const condicoesDaFabrica = computed(() =>
+  condicoes.value.filter(
+    (c) => c.fabrica_id === form.fabrica_id && (c.ativo || c.id === pedido.value?.condicao_pagamento_id)
+  )
+)
+
+// trocou a fábrica: a condição de outra fábrica não vale mais
+watch(
+  () => form.fabrica_id,
+  (fabrica) => {
+    const escolhida = condicoes.value.find((c) => c.id === form.condicao_pagamento_id)
+    if (escolhida && escolhida.fabrica_id !== fabrica) {
+      form.condicao_pagamento_id = ''
+      toast.info('A condição de pagamento era de outra fábrica — escolha de novo.')
+    }
+  }
+)
+
+/** A mesma condição já guardada no pedido usa o nome e o % dele (o cadastro pode ter mudado depois). */
+const mesmaDoPedido = computed(
+  () => !!form.condicao_pagamento_id && form.condicao_pagamento_id === pedido.value?.condicao_pagamento_id
+)
+const condicaoEscolhida = computed(() => condicoes.value.find((c) => c.id === form.condicao_pagamento_id) ?? null)
+const percentualCondicao = computed(() => {
+  if (!form.condicao_pagamento_id) return 0
+  return mesmaDoPedido.value ? Number(pedido.value?.condicao_percentual) || 0 : (condicaoEscolhida.value?.percentual ?? 0)
+})
+const nomeCondicao = computed(() =>
+  mesmaDoPedido.value ? pedido.value?.condicao_pagamento || 'Condição' : condicaoEscolhida.value?.nome || 'Condição'
+)
+
 const subtotal = computed(() => form.itens.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0))
-const total = computed(() => subtotal.value + form.frete_valor - form.desconto_valor)
+const valorCondicao = computed(() => valorDaCondicao(subtotal.value, percentualCondicao.value))
+const total = computed(() => subtotal.value + valorCondicao.value + form.frete_valor - form.desconto_valor)
 
 onMounted(async () => {
   try {
     pedido.value = porId(id) ?? (await buscarUm(id))
     if (pedido.value) {
       form.itens = await buscarItens(id)
-      form.condicao_pagamento = pedido.value.condicao_pagamento || ''
+      form.condicao_pagamento_id = pedido.value.condicao_pagamento_id ?? ''
+      textoAntigo.value = pedido.value.condicao_pagamento_id ? '' : pedido.value.condicao_pagamento || ''
       form.prazo_entrega = pedido.value.prazo_entrega || ''
       form.desconto_valor = pedido.value.desconto_valor || 0
       form.frete_valor = pedido.value.frete_valor || 0
@@ -325,7 +399,9 @@ async function salvarTudo(pedidoId: string) {
   const atualizado = await atualizarComItens(
     pedidoId,
     {
-      condicao_pagamento: form.condicao_pagamento,
+      // com condição do cadastro o banco põe o nome; sem, fica o texto antigo (se houver)
+      condicao_pagamento_id: form.condicao_pagamento_id,
+      condicao_pagamento: form.condicao_pagamento_id ? null : textoAntigo.value || null,
       prazo_entrega: form.prazo_entrega,
       observacoes: form.observacoes,
       // v-model.number devolve '' com o campo vazio — o cast pra numeric no banco quebraria

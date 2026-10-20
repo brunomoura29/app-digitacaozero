@@ -22,6 +22,7 @@ export const MODULOS_SISTEMA: ModuloSistema[] = [
   { chave: 'vendedores', label: 'Vendedores' },
   { chave: 'produtos', label: 'Produtos' },
   { chave: 'tabela_preco', label: 'Tabela de preço' },
+  { chave: 'condicoes_pagamento', label: 'Condições de pagamento' },
   { chave: 'pedidos', label: 'Pedidos' },
   { chave: 'relatorios', label: 'Relatórios' }
 ]

@@ -35,7 +35,13 @@ export interface Pedido {
   numero: string
   status: StatusPedido
   data_emissao: string
+  /** Nome da condição — a escolhida no cadastro, ou o texto digitado em pedido antigo. */
   condicao_pagamento: string | null
+  /** Condição do cadastro (null = sem condição, ou pedido antigo com texto livre). */
+  condicao_pagamento_id?: string | null
+  /** % da condição guardado no pedido (com sinal: negativo = desconto) e o valor que ele deu sobre o subtotal. */
+  condicao_percentual?: number
+  condicao_valor?: number
   prazo_entrega: string | null
   observacoes: string | null
   dados_extras: Record<string, unknown>
@@ -136,6 +142,11 @@ export interface PedidoEdicao {
   referencia_id: string | null
   /** Sem a chave, as informações do pedido ficam como estão. */
   informacoes?: InformacaoPedido[]
+  /**
+   * Condição do cadastro ('' = nenhuma — vale o texto de `condicao_pagamento`). O banco busca o
+   * nome e o % quando ela muda; a mesma de antes mantém o que está guardado no pedido.
+   */
+  condicao_pagamento_id?: string
 }
 
 /**

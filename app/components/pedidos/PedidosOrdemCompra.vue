@@ -118,25 +118,23 @@
           Itens
         </p>
         <ul class="tabular-nums">
-          <li v-for="(item, i) in itens" :key="item.id" class="flex gap-3 border-b border-shift3-border py-3">
+          <li v-for="(l, i) in linhas" :key="l.item.id" class="flex gap-3 border-b border-shift3-border py-3">
             <span class="w-5 shrink-0 pt-0.5 text-xs text-shift3-text-muted">{{ i + 1 }}</span>
             <div class="min-w-0 flex-1">
               <p class="break-words text-sm font-medium text-shift3-text">
-                {{ primeiraMaiuscula(item.descricao || item.descricao_original) || '—' }}
+                {{ primeiraMaiuscula(l.item.descricao || l.item.descricao_original) || '—' }}
               </p>
-              <p v-if="item.sku" class="mt-0.5 break-words text-xs text-shift3-text-secondary">Cód. {{ item.sku }}</p>
+              <p v-if="l.item.sku" class="mt-0.5 break-words text-xs text-shift3-text-secondary">Cód. {{ l.item.sku }}</p>
               <div class="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                 <span class="text-xs text-shift3-text-secondary">
-                  {{ formatQtd(item.quantidade) }} × {{ formatValor(item.preco_unitario) }}
+                  {{ formatQtd(l.item.quantidade) }} × {{ formatValor(l.unitLiquido) }}
                 </span>
-                <span class="ml-auto text-sm font-semibold text-shift3-text">
-                  {{ formatValor(item.quantidade * item.preco_unitario) }}
-                </span>
+                <span class="ml-auto text-sm font-semibold text-shift3-text">{{ formatValor(l.total) }}</span>
               </div>
-              <p v-if="item.ipi != null" class="mt-0.5 text-xs font-semibold text-shift3-text">IPI {{ formatPct(item.ipi) }}</p>
-              <p v-if="ajusteItem(item) !== null" class="mt-0.5 text-xs">
-                <span class="text-shift3-text-muted line-through">{{ formatValor(Number(item.preco_tabela)) }}</span>
-                <span class="ml-1.5 font-semibold" :class="classeAjuste(item)">{{ rotuloPercentual(ajusteItem(item)!) }}</span>
+              <p v-if="l.item.ipi != null" class="mt-0.5 text-xs font-semibold text-shift3-text">IPI {{ formatPct(l.item.ipi) }}</p>
+              <p v-if="l.pct !== null" class="mt-0.5 text-xs">
+                <span class="text-shift3-text-muted line-through">{{ formatValor(l.base) }}</span>
+                <span class="ml-1.5 font-semibold" :class="classePct(l.pct)">{{ rotuloPercentual(l.pct) }}</span>
               </p>
             </div>
           </li>
@@ -161,24 +159,22 @@
             </tr>
           </thead>
           <tbody class="tabular-nums">
-            <tr v-for="(item, i) in itens" :key="item.id" class="break-inside-avoid border-b border-shift3-border">
+            <tr v-for="(l, i) in linhas" :key="l.item.id" class="break-inside-avoid border-b border-shift3-border">
               <td class="py-2.5 pr-2 text-shift3-text-muted">{{ i + 1 }}</td>
-              <td v-if="temCodigo" class="whitespace-nowrap px-2 py-2.5 text-shift3-text-secondary">{{ item.sku || '—' }}</td>
-              <td class="px-2 py-2.5 text-shift3-text">{{ primeiraMaiuscula(item.descricao || item.descricao_original) || '—' }}</td>
-              <td class="whitespace-nowrap px-2 py-2.5 text-right text-shift3-text">{{ formatQtd(item.quantidade) }}</td>
+              <td v-if="temCodigo" class="whitespace-nowrap px-2 py-2.5 text-shift3-text-secondary">{{ l.item.sku || '—' }}</td>
+              <td class="px-2 py-2.5 text-shift3-text">{{ primeiraMaiuscula(l.item.descricao || l.item.descricao_original) || '—' }}</td>
+              <td class="whitespace-nowrap px-2 py-2.5 text-right text-shift3-text">{{ formatQtd(l.item.quantidade) }}</td>
               <template v-if="temAjuste">
-                <td class="whitespace-nowrap px-2 py-2.5 text-right text-shift3-text">{{ formatValor(precoBase(item)) }}</td>
-                <td class="whitespace-nowrap px-2 py-2.5 text-right font-semibold" :class="classeAjuste(item)">
-                  {{ ajusteItem(item) !== null ? rotuloPercentual(ajusteItem(item)!) : '—' }}
+                <td class="whitespace-nowrap px-2 py-2.5 text-right text-shift3-text">{{ formatValor(l.base) }}</td>
+                <td class="whitespace-nowrap px-2 py-2.5 text-right font-semibold" :class="classePct(l.pct)">
+                  {{ l.pct !== null ? rotuloPercentual(l.pct) : '—' }}
                 </td>
               </template>
-              <td class="whitespace-nowrap px-2 py-2.5 text-right text-shift3-text">{{ formatValor(item.preco_unitario) }}</td>
+              <td class="whitespace-nowrap px-2 py-2.5 text-right text-shift3-text">{{ formatValor(l.unitLiquido) }}</td>
               <td v-if="temIpi" class="whitespace-nowrap px-2 py-2.5 text-right font-semibold text-shift3-text">
-                {{ item.ipi != null ? formatPct(item.ipi) : '—' }}
+                {{ l.item.ipi != null ? formatPct(l.item.ipi) : '—' }}
               </td>
-              <td class="whitespace-nowrap py-2.5 pl-2 text-right font-medium text-shift3-text">
-                {{ formatValor(item.quantidade * item.preco_unitario) }}
-              </td>
+              <td class="whitespace-nowrap py-2.5 pl-2 text-right font-medium text-shift3-text">{{ formatValor(l.total) }}</td>
             </tr>
           </tbody>
         </table>
@@ -196,8 +192,13 @@
         <div class="ml-auto w-full space-y-2 tabular-nums sm:w-72 print:w-72">
           <div class="flex justify-between px-4 text-sm">
             <span class="text-shift3-text-secondary">Subtotal · {{ itens.length }} {{ itens.length === 1 ? 'item' : 'itens' }}</span>
-            <span class="text-shift3-text">{{ formatValor(subtotal) }}</span>
+            <span class="text-shift3-text">{{ formatValor(subtotalLiquido) }}</span>
           </div>
+          <!-- a condição de pagamento já está dentro de cada item: aqui só a nota, sem descontar de novo -->
+          <p v-if="pctCondicao" class="-mt-1 px-4 text-right text-xs text-shift3-text-muted">
+            inclui {{ pedido.condicao_pagamento || 'condição de pagamento' }} ({{ rotuloPercentual(pctCondicao) }}):
+            {{ valorCondicao < 0 ? '−' : '+' }} {{ formatValor(Math.abs(valorCondicao)) }}
+          </p>
           <div v-if="pedido.frete_valor" class="flex justify-between px-4 text-sm">
             <span class="text-shift3-text-secondary">Frete</span>
             <span class="text-shift3-text">+ {{ formatValor(pedido.frete_valor) }}</span>
@@ -283,14 +284,58 @@ function ajusteItem(item: PedidoItem): number | null {
 const temIpi = computed(() => props.itens.some((item) => item.ipi != null))
 const formatPct = (v: number) => `${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
 
-/** Colunas Desc. e Unit. líq. só aparecem se algum item saiu diferente da tabela. */
-const temAjuste = computed(() => props.itens.some((item) => ajusteItem(item) !== null))
+/** % da condição de pagamento — entra em cada item (desconto/acréscimo da OC inteira). */
+const pctCondicao = computed(() => Number(props.pedido.condicao_percentual) || 0)
+const valorCondicao = computed(() => Number(props.pedido.condicao_valor) || 0)
 
-/** Coluna "Unitário": preço de tabela quando teve ajuste; senão, o próprio preço. */
-const precoBase = (item: PedidoItem) => (ajusteItem(item) !== null ? Number(item.preco_tabela) : item.preco_unitario)
+interface LinhaOC {
+  item: PedidoItem
+  /** "Unitário": preço de tabela quando a política mexeu; senão, o preço do item. */
+  base: number
+  /** % total sobre o `base` (política e condição, um sobre o outro) — null = sem ajuste. */
+  pct: number | null
+  unitLiquido: number
+  total: number
+}
+
+/**
+ * Cada item já com a política e a condição de pagamento. O total de cada linha sai do preço
+ * cheio × (1 + % condição), arredondado; o centavo que sobrar do arredondamento vai pra linha
+ * maior — assim a soma dos itens bate com o subtotal + condição que o banco gravou.
+ */
+const linhas = computed<LinhaOC[]>(() => {
+  const fator = 1 + pctCondicao.value / 100
+  const lista = props.itens.map((item) => {
+    const politica = ajusteItem(item)
+    const base = politica !== null ? Number(item.preco_tabela) : Number(item.preco_unitario)
+    const composto = ((1 + (politica ?? 0) / 100) * fator - 1) * 100
+    const pct = Math.abs(composto) < 0.005 ? null : Math.round(composto * 100) / 100
+    return {
+      item,
+      base,
+      pct,
+      unitLiquido: Math.round(Number(item.preco_unitario) * fator * 100) / 100,
+      total: Math.round(item.quantidade * Number(item.preco_unitario) * fator * 100) / 100
+    }
+  })
+  if (pctCondicao.value && lista.length) {
+    const esperado = subtotal.value + valorCondicao.value
+    const sobra = Math.round((esperado - lista.reduce((s, l) => s + l.total, 0)) * 100) / 100
+    if (sobra) {
+      const maior = lista.reduce((a, b) => (Math.abs(b.total) > Math.abs(a.total) ? b : a))
+      maior.total = Math.round((maior.total + sobra) * 100) / 100
+    }
+  }
+  return lista
+})
+/** Subtotal mostrado: soma dos itens já líquidos (com a condição dentro). */
+const subtotalLiquido = computed(() => Math.round(linhas.value.reduce((s, l) => s + l.total, 0) * 100) / 100)
+
+/** Colunas Desc. e Unit. líq. só aparecem se algum item saiu diferente da tabela (política ou condição). */
+const temAjuste = computed(() => linhas.value.some((l) => l.pct !== null))
 
 /** Desconto em destaque (verde-escuro: o verde claro some no papel/PDF); acréscimo em texto normal. */
-const classeAjuste = (item: PedidoItem) => ((ajusteItem(item) ?? 0) < 0 ? 'text-shift3-teal' : 'text-shift3-text-secondary')
+const classePct = (pct: number | null) => ((pct ?? 0) < 0 ? 'text-shift3-teal' : 'text-shift3-text-secondary')
 
 /** Monograma usado no lugar da logo enquanto o representante não envia uma. */
 const iniciais = computed(() =>
