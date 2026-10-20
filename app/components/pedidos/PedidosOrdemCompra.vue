@@ -96,6 +96,21 @@
         </dl>
       </section>
 
+      <!-- ───── Informações do pedido: os campos do cabeçalho do template que vieram preenchidos ───── -->
+      <section v-if="informacoes.length">
+        <p class="border-b border-shift3-border pb-2 text-[11px] font-semibold uppercase tracking-wide text-shift3-text-muted">
+          Informações do pedido
+        </p>
+        <dl
+          class="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3"
+        >
+          <div v-for="info in informacoes" :key="info.id" class="min-w-0">
+            <dt class="text-[11px] font-semibold uppercase tracking-wide text-shift3-text-muted">{{ info.nome }}</dt>
+            <dd class="mt-0.5 break-words text-sm font-medium text-shift3-text">{{ exibirInformacao(info) }}</dd>
+          </div>
+        </dl>
+      </section>
+
       <!-- ───── Itens ───── -->
       <!-- Celular: um cartão por item, sem rolagem lateral. O PDF sempre usa a tabela. -->
       <section class="sm:hidden print:hidden">
@@ -230,6 +245,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ParteOC } from '~/types/empresa'
+import { exibirInformacao, informacoesDoPedido } from '~/types/pedido'
 import type { Pedido, PedidoItem } from '~/types/pedido'
 
 const props = withDefaults(
@@ -243,6 +259,8 @@ const props = withDefaults(
   { empresa: null, cliente: null, fabrica: null }
 )
 
+/** Só as preenchidas — campo do template que a loja não mandou não ocupa espaço na OC. */
+const informacoes = computed(() => informacoesDoPedido(props.pedido.dados_extras).filter((i) => i.valor.trim()))
 const nomeCliente = computed(() => props.cliente?.nome || props.pedido.clientes?.nome || '—')
 const subtotal = computed(() => props.itens.reduce((acc, item) => acc + item.quantidade * item.preco_unitario, 0))
 const temCodigo = computed(() => props.itens.some((item) => item.sku))

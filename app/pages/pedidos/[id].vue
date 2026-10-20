@@ -37,6 +37,24 @@
         <div />
       </section>
 
+      <!-- Campos do cabeçalho do template (Transportadora, Prazo…) — os preenchidos saem na OC -->
+      <section v-if="form.informacoes.length" class="space-y-4">
+        <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
+          <Icon name="heroicons:document-text" class="h-5 w-5 text-shift3-teal" />
+          <p class="text-base font-semibold text-shift3-text">Informações do pedido</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <BaseInput
+            v-for="info in form.informacoes"
+            :key="info.id"
+            v-model="info.valor"
+            :label="info.nome"
+            :type="info.tipo === 'data' ? 'date' : 'text'"
+            :disabled="!podeEditar"
+          />
+        </div>
+      </section>
+
       <!-- Fábrica/lista de preço — usada pra buscar o preço unitário ao selecionar o produto -->
       <section class="space-y-4">
         <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
@@ -234,7 +252,8 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
-import type { Pedido, PedidoItem, StatusPedido } from '~/types/pedido'
+import { informacoesDoPedido } from '~/types/pedido'
+import type { InformacaoPedido, Pedido, PedidoItem, StatusPedido } from '~/types/pedido'
 import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({ layout: 'dashboard', title: 'Pedido', backTo: '/pedidos' })
@@ -269,6 +288,7 @@ const form = reactive({
   observacoes: '',
   fabrica_id: null as string | null,
   referencia_id: null as string | null,
+  informacoes: [] as InformacaoPedido[],
   itens: [] as PedidoItem[]
 })
 
@@ -290,6 +310,8 @@ onMounted(async () => {
       form.observacoes = pedido.value.observacoes || ''
       form.fabrica_id = pedido.value.fabrica_id
       form.referencia_id = pedido.value.referencia_id
+      // cópia: editar aqui não pode mexer no pedido em memória antes de salvar
+      form.informacoes = informacoesDoPedido(pedido.value.dados_extras).map((i) => ({ ...i }))
     }
   } catch {
     toast.error('Não foi possível carregar o pedido')
@@ -310,7 +332,9 @@ async function salvarTudo(pedidoId: string) {
       desconto_valor: Number(form.desconto_valor) || 0,
       frete_valor: Number(form.frete_valor) || 0,
       fabrica_id: form.fabrica_id,
-      referencia_id: form.referencia_id
+      referencia_id: form.referencia_id,
+      // pedido sem informações (antigo, ou de template sem cabeçalho): não manda, fica como está
+      ...(form.informacoes.length ? { informacoes: form.informacoes.map((i) => ({ ...i, valor: i.valor.trim() })) } : {})
     },
     form.itens
   )

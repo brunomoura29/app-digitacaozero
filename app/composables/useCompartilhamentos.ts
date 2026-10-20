@@ -87,6 +87,9 @@ export function useCompartilhamentos() {
     })
     if (erroCabecalho) console.error('Erro ao buscar cabeçalho da OC:', erroCabecalho)
 
+    // o link público não lê dados_extras: as informações do pedido vêm no cabeçalho da OC
+    if (!erroCabecalho) pedido.dados_extras = { informacoes: (cabecalho as unknown as CabecalhoOC | null)?.informacoes ?? [] }
+
     return {
       pedido,
       itens: (itens as unknown as PedidoItem[]) ?? [],

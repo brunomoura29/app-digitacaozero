@@ -19,7 +19,7 @@ export const TIPOS_CAMPO: { valor: TipoCampo; label: string }[] = [
 
 /**
  * Papel que um campo do ITEM cumpre nas colunas fixas de `pedidos_itens`. Só faz sentido
- * pra `campos_item` (o cabeçalho vai inteiro pra `dados_extras`, sem coluna fixa). Quando
+ * pra `campos_item` (o cabeçalho vai pra `dados_extras.informacoes`, sem coluna fixa). Quando
  * definido explicitamente aqui, tem prioridade sobre a heurística por sinônimo de nome —
  * resolve o caso de dois campos parecidos no mesmo template (ex: "SKU Fábrica" x "SKU
  * Cliente") que a heurística sozinha não consegue distinguir.
@@ -86,7 +86,8 @@ export interface SchemaModelo {
   destino?: DestinoModelo
   /**
    * Como ler a planilha de cada cliente (chave = id do cliente) — aprendido na primeira
-   * importação e reaproveitado nas seguintes. Só no destino `dados`. Ver utils/layoutPlanilha.ts.
+   * importação e reaproveitado nas seguintes. Nos dois destinos (no `pedido`, só planilha). Ver
+   * utils/layoutPlanilha.ts.
    */
   layouts?: Record<string, LayoutSalvo>
 }
@@ -136,6 +137,21 @@ export interface ReceitaLayout {
   ignorar: { coluna: string; contem: string }[]
   /** Letra da coluna dos títulos de grupo, ou '' quando não há. */
   coluna_grupo: string
+  /** Só no destino `pedido`: a aba do pedido (as outras são apoio — tabela de preço, estoque). Ausente = a primeira. */
+  aba?: string
+  /** Só no destino `pedido`: onde está o valor de cada campo do cabeçalho do template (ver `CabecalhoLayout`). */
+  cabecalho?: CabecalhoLayout[]
+}
+
+/**
+ * Onde está um campo do cabeçalho na planilha, acima dos títulos: pelo `rotulo` (o texto da
+ * célula de rótulo, ex: "PRAZO DE PGTO:" — o valor é a próxima célula preenchida à direita) ou,
+ * quando não há rótulo, pela `celula` do valor (ex: "L1"). Os dois podem vir; o rótulo manda.
+ */
+export interface CabecalhoLayout {
+  campo_id: string
+  rotulo: string
+  celula: string
 }
 
 export interface LayoutSalvo {

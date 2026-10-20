@@ -234,11 +234,50 @@ Regras:
 - As etapas trabalham linha a linha. O programa NÃO soma nem compara várias linhas entre si (totais, médias, percentual sobre o total, saldo acumulado), não cruza com outro arquivo e não transforma colunas em linhas. Se a instrução pedir isso, não finja nem aproxime: diga no resumo, em uma frase, o que não foi feito e que dá pra fazer no Power BI.
 - No resumo, conte também o que cada etapa faz, na linguagem do usuário.`
 
-function esquemaLayout(idsCampos: string[]) {
+/** Acrescentado ao SISTEMA_LAYOUT quando a planilha é um PEDIDO (template de destino `pedido`). */
+const SISTEMA_LAYOUT_PEDIDO = `
+
+ESTA PLANILHA É UM PEDIDO DE COMPRA
+
+O arquivo é um pedido que a loja (cliente do representante comercial) mandou para ser digitado e enviado à fábrica. Muitas vezes é o CATÁLOGO INTEIRO da fábrica com uma coluna de quantidade, e a loja preencheu só os produtos que quer: centenas de linhas, poucas com quantidade. Pode haver títulos de seção no meio (ex: "VISEIRAS", "CAPACETES CITY"), imagens, linhas de total e um formulário no topo (vendedor, razão social, CNPJ, prazo, transportadora).
+
+O que o programa faz sozinho, e você NÃO deve repetir com etapas ou regras de ignorar:
+- Fica só com as linhas que têm quantidade maior que zero no campo de quantidade. Linhas de seção, de produto não pedido e vazias saem por isso.
+- Não usa preço, custo, total nem preço sugerido da planilha: o preço vem da tabela de preço do sistema. Mesmo assim, ligue um campo de preço do template se existir uma coluna que combine.
+
+O que muda na sua resposta:
+- aba: o nome da aba onde está o pedido, exatamente como listado. Abas de apoio (tabela de preço, preço sugerido, base de dados, estoque) não são o pedido.
+- linha_titulos, campos e o resto: valem para a aba escolhida (use as linhas e letras da amostra dela).
+- Código, descrição e quantidade: decida pelos VALORES das linhas de dado, não só pelo título. É comum o título "Descrição" estar em cima da coluna do código, com a descrição de verdade na coluna seguinte sem título. Código do produto costuma ser numérico ou alfanumérico curto, às vezes formatado ("205.302.001"); a descrição é o texto longo. A quantidade é a coluna que a loja preenche ("Qtd", "Qnt. Ped.", "Pedido") — não confunda com estoque ou caixa master.
+- coluna_grupo: "" (as seções não interessam ao pedido).
+- cabecalho: para cada campo do cabeçalho do template, onde está o valor, ACIMA da linha dos títulos. "rotulo" = o texto exato do rótulo, como na amostra (ex: "PRAZO DE PGTO:"), SEM o valor — numa célula "Transp.: JAMEF", o rótulo é "Transp.:", porque no próximo arquivo o valor muda; o programa pega o valor na mesma célula depois dos dois-pontos ou na próxima célula preenchida à direita. Quando o valor não tem rótulo (ex: uma data solta no topo), "rotulo" "" e "celula" = a célula do valor (ex: "L1"); com rótulo, "celula" "". Case pelo significado ("Prazo" = "PRAZO DE PGTO:", "Transportadora" = "TRANSPORTADORA:"). Campo que não existe na planilha fica fora da lista. O valor pode estar em branco neste arquivo e vir preenchido no próximo: ligue assim mesmo.
+- No resumo, diga em que aba e linha estão os itens, que coluna é código, descrição e quantidade, e o que foi achado do cabeçalho.`
+
+function esquemaLayout(idsCampos: string[], pedido?: { abas: string[]; idsCabecalho: string[] }) {
   const letra = { type: 'string', description: 'Letra da coluna do Excel, como na amostra (ex: "A", "M", "AB").' }
+  const extrasPedido = pedido
+    ? {
+        aba: { type: 'string', enum: pedido.abas },
+        cabecalho: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              // sem campo de cabeçalho no template, a lista fica vazia (enum vazio não é aceito)
+              campo_id: pedido.idsCabecalho.length ? { type: 'string', enum: pedido.idsCabecalho } : { type: 'string' },
+              rotulo: { type: 'string' },
+              celula: { type: 'string', description: 'Célula do valor quando não há rótulo (ex: "L1"); senão "".' }
+            },
+            required: ['campo_id', 'rotulo', 'celula'],
+            additionalProperties: false
+          }
+        }
+      }
+    : {}
   return {
     type: 'object',
     properties: {
+      ...extrasPedido,
       linha_titulos: { type: 'integer', description: 'Número da linha dos títulos, como na amostra.' },
       titulos_em_duas_linhas: { type: 'boolean' },
       campos: {
@@ -287,7 +326,17 @@ function esquemaLayout(idsCampos: string[]) {
       resumo: { type: 'string' },
       confianca: { type: 'string', enum: ['alta', 'media', 'baixa'] }
     },
-    required: ['linha_titulos', 'titulos_em_duas_linhas', 'campos', 'etapas', 'ignorar', 'coluna_grupo', 'resumo', 'confianca'],
+    required: [
+      ...(pedido ? ['aba', 'cabecalho'] : []),
+      'linha_titulos',
+      'titulos_em_duas_linhas',
+      'campos',
+      'etapas',
+      'ignorar',
+      'coluna_grupo',
+      'resumo',
+      'confianca'
+    ],
     additionalProperties: false
   }
 }
@@ -313,10 +362,18 @@ export async function analisarLayoutPlanilha(opts: {
   dicas?: string
   /** O que o usuário pediu pra este cliente/arquivo, na tela de importação. */
   instrucoes?: string
+  /** Planilha de pedido: as abas do arquivo (a IA escolhe a do pedido) e os campos do cabeçalho do template. */
+  pedido?: { abas: string[]; camposCabecalho: CampoSchema[] }
 }): Promise<AnaliseLayout> {
-  const listaCampos = opts.campos
-    .map((c) => `- id "${c.id}": ${c.nome} (${NOME_TIPO[c.tipo]}${c.obrigatorio ? ', obrigatório' : ''})`)
-    .join('\n')
+  const descreverCampos = (campos: CampoSchema[]) =>
+    campos.map((c) => `- id "${c.id}": ${c.nome} (${NOME_TIPO[c.tipo]}${c.obrigatorio ? ', obrigatório' : ''})`).join('\n')
+  const camposCabecalho = opts.pedido?.camposCabecalho ?? []
+  const listaCampos =
+    (opts.pedido ? 'Campos de cada item do pedido:\n' : '') +
+    descreverCampos(opts.campos) +
+    (opts.pedido
+      ? `\n\nCampos do cabeçalho do pedido:\n${camposCabecalho.length ? descreverCampos(camposCabecalho) : '(nenhum — "cabecalho" fica vazio)'}`
+      : '')
   const dicas =
     (opts.dicas?.trim() ? `\n\nInstruções do usuário pra este template (valem pra todos os arquivos): ${opts.dicas.trim()}` : '') +
     (opts.instrucoes?.trim() ? `\n\nInstruções do usuário pra este arquivo: ${opts.instrucoes.trim()}` : '')
@@ -329,7 +386,7 @@ export async function analisarLayoutPlanilha(opts: {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
-      system: SISTEMA_LAYOUT,
+      system: opts.pedido ? SISTEMA_LAYOUT + SISTEMA_LAYOUT_PEDIDO : SISTEMA_LAYOUT,
       messages: [
         {
           role: 'user',
@@ -338,7 +395,13 @@ export async function analisarLayoutPlanilha(opts: {
       ],
       output_config: {
         effort: 'medium',
-        format: { type: 'json_schema', schema: esquemaLayout(opts.campos.map((c) => c.id)) }
+        format: {
+          type: 'json_schema',
+          schema: esquemaLayout(
+            opts.campos.map((c) => c.id),
+            opts.pedido && { abas: opts.pedido.abas, idsCabecalho: camposCabecalho.map((c) => c.id) }
+          )
+        }
       }
     },
     { maxRetries: 2, timeout: 120_000 }

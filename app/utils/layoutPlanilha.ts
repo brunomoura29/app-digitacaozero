@@ -4,7 +4,7 @@
  * planilha que vai pra IA ler o layout — a IA só vê a amostra e devolve a receita; os valores
  * saem sempre do arquivo, pelo código.
  */
-import type { ReceitaLayout } from '~/types/modelo'
+import type { CabecalhoLayout, ReceitaLayout } from '~/types/modelo'
 import { indiceDaColuna, letraDaColuna } from '~/utils/gradePlanilha'
 import type { AbaLida, Celula, GradePlanilha, OpcoesLeitura } from '~/utils/gradePlanilha'
 
@@ -161,8 +161,71 @@ export function receitaDoMapeamento(
     campos,
     ignorar: base.ignorar,
     coluna_grupo: base.coluna_grupo,
-    etapas: base.etapas ?? []
+    etapas: base.etapas ?? [],
+    ...(base.aba ? { aba: base.aba } : {}),
+    ...(base.cabecalho ? { cabecalho: base.cabecalho } : {})
   }
+}
+
+/** Quantas abas vão inteiras na amostra do pedido — as outras só pelo nome. */
+const AMOSTRA_MAX_ABAS = 4
+
+/**
+ * Amostra de um pedido em planilha: o arquivo do cliente pode ter, além da aba do pedido,
+ * abas de apoio (tabela de preço, estoque) — e a do pedido nem sempre é a primeira. Vai uma
+ * amostra de cada aba pra IA escolher.
+ */
+export function amostraDasAbas(grades: GradePlanilha[], instrucoes = ''): string {
+  const inteiras = grades.slice(0, AMOSTRA_MAX_ABAS)
+  const resto = grades.slice(AMOSTRA_MAX_ABAS).map((g) => g.nome)
+  const partes = [`O arquivo tem ${grades.length} aba(s): ${grades.map((g) => `"${g.nome}"`).join(', ')}.`]
+  if (resto.length) partes.push(`Só as ${AMOSTRA_MAX_ABAS} primeiras vão na amostra.`)
+  for (const grade of inteiras) partes.push('', amostraDaGrade(grade, [], instrucoes))
+  return partes.join('\n')
+}
+
+/** A grade da aba que a receita escolheu (ou a primeira, quando ela não diz ou a aba sumiu). */
+export function gradeDaReceita(grades: GradePlanilha[], receita: ReceitaLayout | null): GradePlanilha | null {
+  return grades.find((g) => g.nome === receita?.aba) ?? grades[0] ?? null
+}
+
+function ehRotulo(valor: Celula): boolean {
+  return typeof valor === 'string' && /:\s*$/.test(valor)
+}
+
+function vazia(valor: Celula | undefined): boolean {
+  return valor == null || (typeof valor === 'string' && !valor.trim())
+}
+
+/**
+ * Valor de um campo do cabeçalho, procurado só acima da linha dos títulos (`ateLinha`, 0 =
+ * primeira). Pelo rótulo: a célula com aquele texto e, nela mesma ("PRAZO: 30 dias") ou na
+ * próxima preenchida à direita, o valor — se a próxima for outro rótulo ("VENDEDOR:" seguido
+ * de "PRAZO DE PGTO:"), o campo veio em branco. Sem rótulo, a célula do valor.
+ */
+export function valorDoCabecalho(grade: GradePlanilha, regra: CabecalhoLayout, ateLinha: number): Celula {
+  // "Transp.: JAMEF" → só "Transp." (o valor muda de um arquivo pro outro, o rótulo não)
+  const rotulo = textoSimples(regra.rotulo.split(':')[0] ?? '')
+  if (rotulo) {
+    for (const linha of grade.linhas.slice(0, Math.max(ateLinha, 0))) {
+      const c = linha.findIndex((valor) => typeof valor === 'string' && textoSimples(valor).startsWith(rotulo))
+      if (c < 0) continue
+      const texto = String(linha[c])
+      const separador = texto.indexOf(':')
+      const naMesma = separador >= 0 ? texto.slice(separador + 1).trim() : ''
+      if (naMesma) return naMesma
+      const proxima = linha.findIndex((valor, i) => i > c && !vazia(valor))
+      return proxima < 0 || ehRotulo(linha[proxima]!) ? null : linha[proxima]!
+    }
+  }
+
+  const posicao = /^([A-Z]+)(\d+)$/i.exec(regra.celula.trim())
+  if (!posicao) return null
+  const coluna = indiceDaColuna(posicao[1]!.toUpperCase())
+  const linha = Number(posicao[2]) - 1
+  if (coluna == null || linha >= ateLinha) return null
+  const valor = grade.linhas[linha]?.[coluna]
+  return vazia(valor) || ehRotulo(valor!) ? null : valor!
 }
 
 export function receitaVazia(): Omit<ReceitaLayout, 'campos' | 'linha_titulos'> {

@@ -9,20 +9,20 @@
         :label="ehPlanilhaAtual ? 'Lendo planilha' : 'Extraindo dados do documento'"
         :hint="
           ehPlanilhaAtual
-            ? undefined
+            ? 'Na primeira planilha de cada loja a IA estuda o formato — leva alguns segundos.'
             : 'Documentos com várias páginas ou muitos itens podem levar alguns minutos — pode deixar a aba aberta.'
         "
       />
 
       <template v-else>
         <p class="text-sm text-shift3-text-secondary">
-          Escolha o cliente e o documento — foto/PDF passa pela IA com um template; planilha (XLSX/CSV) é lida
-          direto, sem template.
+          Escolha o template, o cliente e o documento — foto, PDF ou a planilha do jeito que a loja mandou. Na
+          planilha, a IA entende o formato na primeira vez e o sistema lembra dele nas próximas deste cliente.
         </p>
 
         <section class="space-y-4">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div v-if="!ehPlanilhaAtual">
+            <div>
               <label class="mb-1 block text-sm font-medium text-shift3-text">Template *</label>
               <select
                 v-model="modeloId"
@@ -36,9 +36,6 @@
                 <NuxtLink to="/templates" class="text-shift3-teal hover:underline">Templates</NuxtLink>.
               </p>
             </div>
-            <div v-else class="flex items-end pb-2 text-sm text-shift3-text-muted">
-              Planilha detectada — o mapeamento de colunas acontece no próximo passo, sem precisar de template.
-            </div>
 
             <ClientesClientePicker v-model="clienteId" />
           </div>
@@ -50,6 +47,24 @@
             :max-size-mb="20"
             hint="PDF, foto ou planilha (XLSX/CSV) do pedido — até 20 MB"
           />
+
+          <div v-if="ehPlanilhaAtual">
+            <label for="instrucoes-pedido" class="mb-1 block text-sm font-medium text-shift3-text">
+              Instruções para a IA <span class="font-normal text-shift3-text-muted">(opcional)</span>
+            </label>
+            <textarea
+              id="instrucoes-pedido"
+              v-model="instrucoes"
+              rows="2"
+              maxlength="2000"
+              :placeholder="EXEMPLO_INSTRUCOES"
+              class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+            />
+            <p class="mt-1 text-xs text-shift3-text-muted">
+              Só se a IA errar alguma coisa nesta loja — diga onde está o código, a quantidade ou o que deixar de fora.
+              Fica guardado pra este cliente.
+            </p>
+          </div>
         </section>
 
         <!-- ───── Ações — teleportadas pra barra fixa do layout (dashboard.vue) ───── -->
@@ -63,9 +78,9 @@
                   variant="primary"
                   icon-left="heroicons:table-cells"
                   :disabled="!podeProcessar"
-                  @click="mapearPlanilha"
+                  @click="lerPlanilhaPedido"
                 >
-                  Mapear colunas
+                  Ler planilha
                 </BaseButton>
                 <BaseButton
                   v-else
@@ -78,6 +93,8 @@
                   Extrair
                 </BaseButton>
                 <BaseButton type="button" variant="ghost" @click="navigateTo('/pedidos')">Cancelar</BaseButton>
+                <!-- diz o que falta — botão desabilitado sem explicação parece defeito -->
+                <span v-if="faltando" class="text-xs text-shift3-text-muted">Falta: {{ faltando }}</span>
               </div>
             </div>
           </Teleport>
@@ -87,12 +104,89 @@
 
     <!-- ───── Etapa 2: mapeamento de colunas (planilha OU itens extraídos pela IA) ───── -->
     <div v-else-if="etapa === 'mapeamento'" class="space-y-8">
+      <!-- planilha: como ela foi entendida (IA, memória da loja ou regras) e quantas linhas viram item -->
+      <section v-if="pedidoLido" class="space-y-3">
+        <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
+          <Icon name="heroicons:bars-3-bottom-left" class="h-5 w-5 text-shift3-teal" />
+          <p class="text-base font-semibold text-shift3-text">Leitura da planilha</p>
+        </div>
+
+        <div class="flex flex-wrap items-start gap-3 rounded-medium border border-shift3-border bg-shift3-bg-card p-4">
+          <span
+            class="grid h-9 w-9 shrink-0 place-items-center rounded-default"
+            :class="origemLayout === 'regras' ? 'bg-warning/20 text-yellow-600' : 'bg-success/20 text-shift3-teal dark:text-success'"
+          >
+            <Icon :name="ORIGENS_LAYOUT[origemLayout].icone" class="h-5 w-5" />
+          </span>
+          <div class="min-w-0 flex-1 basis-72 space-y-1">
+            <p class="text-sm font-semibold text-shift3-text">{{ ORIGENS_LAYOUT[origemLayout].titulo }}</p>
+            <p class="text-sm text-shift3-text-secondary">
+              {{ origemLayout === 'ia' ? resumoIa : ORIGENS_LAYOUT[origemLayout].texto }}
+            </p>
+            <p v-if="origemLayout === 'ia' && confiancaIa !== 'alta'" class="text-xs font-medium text-yellow-600">
+              A IA ficou em dúvida neste arquivo — confira o mapeamento abaixo com atenção.
+            </p>
+            <p v-if="falhaIa" class="text-xs text-danger">A IA não foi usada: {{ falhaIa }}</p>
+            <p v-if="errosEtapas.length" class="text-xs text-danger">
+              Parte das instruções não pôde ser aplicada: {{ errosEtapas.join(' · ') }}
+            </p>
+          </div>
+          <BaseButton
+            variant="secondary"
+            size="sm"
+            icon-left="heroicons:sparkles"
+            :loading="analisando"
+            @click="analisarDeNovo"
+          >
+            {{ origemLayout === 'ia' ? 'Analisar de novo' : 'Analisar com IA' }}
+          </BaseButton>
+
+          <div class="w-full">
+            <label for="instrucoes-leitura" class="mb-1 block text-xs font-medium text-shift3-text">
+              Instruções para a IA <span class="font-normal text-shift3-text-muted">(opcional)</span>
+            </label>
+            <textarea
+              id="instrucoes-leitura"
+              v-model="instrucoes"
+              rows="2"
+              maxlength="2000"
+              :placeholder="EXEMPLO_INSTRUCOES"
+              class="w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20"
+            />
+            <p v-if="instrucoesMudaram" class="mt-1 text-xs font-medium text-yellow-600">
+              Você mudou as instruções — clique em “{{ origemLayout === 'ia' ? 'Analisar de novo' : 'Analisar com IA' }}”
+              pra IA reler o arquivo com elas.
+            </p>
+          </div>
+        </div>
+
+        <!-- o número que importa: das centenas de linhas do catálogo, quantas a loja pediu -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div class="rounded-medium border border-shift3-border bg-shift3-bg-card p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-shift3-text-muted">Aba</p>
+            <p class="mt-1 truncate text-sm font-semibold text-shift3-text">{{ pedidoLido.aba.nome }}</p>
+            <p class="text-xs text-shift3-text-muted">títulos na linha {{ pedidoLido.aba.linhaCabecalho + 1 }}</p>
+          </div>
+          <div class="rounded-medium border border-shift3-border bg-shift3-bg-card p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-shift3-text-muted">Linhas na planilha</p>
+            <p class="mt-1 text-2xl font-bold text-shift3-text">{{ linhasArquivo.length.toLocaleString('pt-BR') }}</p>
+          </div>
+          <div class="rounded-medium border border-shift3-green/40 bg-success/10 p-4">
+            <p class="text-xs font-medium uppercase tracking-wide text-shift3-text-muted">Com quantidade = itens</p>
+            <p class="mt-1 text-2xl font-bold text-shift3-teal dark:text-success">
+              {{ colunaQuantidade ? linhasDoPedido.length.toLocaleString('pt-BR') : '—' }}
+            </p>
+            <p v-if="!colunaQuantidade" class="text-xs text-yellow-600">Escolha a coluna da quantidade abaixo.</p>
+          </div>
+        </div>
+      </section>
+
       <PedidosMapeamentoColunas
         v-model="mapeamentoColunas"
         v-model:identificador="identificador"
         :do-template="!ehPlanilhaAtual"
         :colunas="colunasArquivo"
-        :linhas="linhasArquivo"
+        :linhas="linhasDoPedido"
         :campos-alvo="camposAlvoAtual"
       />
 
@@ -160,8 +254,11 @@
       <section v-if="modeloAtual?.schema.campos.length" class="space-y-4">
         <div class="flex items-center gap-2 border-b border-shift3-border pb-2">
           <Icon name="heroicons:document-text" class="h-5 w-5 text-shift3-teal" />
-          <p class="text-base font-semibold text-shift3-text">Dados do pedido</p>
+          <p class="text-base font-semibold text-shift3-text">Informações do pedido</p>
         </div>
+        <p class="text-xs text-shift3-text-muted">
+          Os campos do cabeçalho do template — os preenchidos aparecem na Ordem de Compra.
+        </p>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div v-for="campo in modeloAtual.schema.campos" :key="campo.id">
             <label class="mb-1 block text-sm font-medium text-shift3-text">{{ campo.nome }}</label>
@@ -223,20 +320,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import type { UploadFile } from '~/composables/useUpload'
-import { lerPlanilha } from '~/composables/useImportarPlanilha'
+import { lerGradesPlanilha } from '~/composables/useImportarPlanilha'
 import {
-  CAMPOS_ALVO_PADRAO,
   aplicarMapeamento,
   camposAlvoDoTemplate,
+  informacoesDoCabecalho,
   itensDoMapeamento,
   sugerirMapeamentoColunas,
+  temQuantidade,
   vincularProdutos
 } from '~/types/pedido'
 import { destinoDoModelo } from '~/types/modelo'
-import type { IdentificadorProduto } from '~/types/modelo'
+import type { AnaliseLayout, IdentificadorProduto, ReceitaLayout } from '~/types/modelo'
 import type { CampoAlvo, PedidoItemInput } from '~/types/pedido'
+import type { GradePlanilha } from '~/utils/gradePlanilha'
+import { amostraDasAbas, mapeamentoDaReceita, receitaDoMapeamento, receitaVazia } from '~/utils/layoutPlanilha'
+import { cabecalhoDoPedido, lerPedido, lerPedidoComLayoutGuardado } from '~/utils/pedidoPlanilha'
+import type { PedidoLido } from '~/utils/pedidoPlanilha'
 
 definePageMeta({ layout: 'dashboard', title: 'Novo pedido', backTo: '/pedidos' })
 
@@ -265,6 +367,21 @@ const modeloAtual = computed(() => modelos.itens.value.find((m) => m.id === mode
 const clienteSelecionado = computed(() => clientes.itens.value.find((c) => c.id === clienteId.value) ?? null)
 
 const ETAPAS_LABEL = ['Importação', 'Mapeamento de colunas', 'Revisão']
+const EXEMPLO_INSTRUCOES =
+  'Ex: o código está na coluna C e a descrição na D; a quantidade pedida é a coluna "Qnt. Ped.", não a de estoque.'
+const ORIGENS_LAYOUT = {
+  ia: { icone: 'heroicons:sparkles', titulo: 'Formato lido pela IA', texto: '' },
+  memoria: {
+    icone: 'heroicons:bookmark',
+    titulo: 'Formato já conhecido desta loja',
+    texto: 'A planilha tem o mesmo formato da última deste cliente neste template — usei o que ficou guardado, sem chamar a IA.'
+  },
+  regras: {
+    icone: 'heroicons:cog-6-tooth',
+    titulo: 'Leitura automática, sem IA',
+    texto: 'As colunas foram ligadas aos campos só pelo nome. Confira o mapeamento abaixo.'
+  }
+}
 
 const etapa = ref<'upload' | 'mapeamento' | 'revisao'>('upload')
 const indiceEtapa = computed(() => ({ upload: 0, mapeamento: 1, revisao: 2 })[etapa.value])
@@ -299,12 +416,58 @@ const ehPlanilhaAtual = computed(() => {
   return !!nome && ehPlanilha(nome)
 })
 
-const podeProcessar = computed(() => {
-  if (!clienteId.value || !arquivos.value.length) return false
-  return ehPlanilhaAtual.value || !!modeloId.value
+/** O que ainda falta preencher pra liberar o botão (vazio = tudo certo). */
+const faltando = computed(() =>
+  [!modeloId.value && 'template', !clienteId.value && 'cliente', !arquivos.value.length && 'arquivo']
+    .filter(Boolean)
+    .join(', ')
+)
+const podeProcessar = computed(() => !faltando.value)
+
+// --- planilha do pedido ---
+const grades = shallowRef<GradePlanilha[]>([])
+/** A aba do pedido já lida — `null` fora do fluxo de planilha (foto/PDF). */
+const pedidoLido = shallowRef<PedidoLido | null>(null)
+/**
+ * Como o formato da planilha foi entendido: pela IA, pelo que ficou guardado da última planilha
+ * desta loja (`memoria`) ou só pelas regras do leitor.
+ */
+const origemLayout = ref<'ia' | 'memoria' | 'regras'>('regras')
+const receitaEmUso = ref<ReceitaLayout | null>(null)
+const resumoIa = ref('')
+const confiancaIa = ref<AnaliseLayout['confianca']>('alta')
+/** Por que a IA não foi usada quando deveria (fica na tela, não só num aviso que some). */
+const falhaIa = ref('')
+const errosEtapas = ref<string[]>([])
+const analisando = ref(false)
+/** O que o usuário pede pra IA sobre as planilhas desta loja — fica guardado com o formato dela. */
+const instrucoes = ref('')
+/** As instruções que valeram na leitura que está na tela — o que for digitado depois só vale ao analisar de novo. */
+const instrucoesLidas = ref('')
+const instrucoesMudaram = computed(() => instrucoes.value.trim() !== instrucoesLidas.value)
+const layoutSalvo = computed(() => (clienteId.value ? modeloAtual.value?.schema.layouts?.[clienteId.value] : null) ?? null)
+watch([modeloId, clienteId], () => {
+  instrucoes.value = layoutSalvo.value?.instrucoes ?? ''
 })
 
-const podeConfirmarMapeamento = computed(() => Object.values(mapeamentoColunas.value).some(Boolean))
+/** Coluna do arquivo ligada ao campo de quantidade do template. */
+const colunaQuantidade = computed(() => {
+  const campo = camposAlvoAtual.value.find((c) => c.papel === 'quantidade')
+  return campo ? (mapeamentoColunas.value[campo.id] ?? null) : null
+})
+/**
+ * Na planilha, só viram item as linhas com quantidade — a loja costuma mandar o catálogo
+ * inteiro e preencher só o que quer. Sem coluna de quantidade escolhida, todas.
+ */
+const linhasDoPedido = computed(() => {
+  const coluna = colunaQuantidade.value
+  if (!pedidoLido.value || !coluna) return linhasArquivo.value
+  return linhasArquivo.value.filter((linha) => temQuantidade(linha[coluna]))
+})
+
+const podeConfirmarMapeamento = computed(
+  () => linhasDoPedido.value.length > 0 && Object.values(mapeamentoColunas.value).some(Boolean)
+)
 
 async function extrair() {
   if (!podeProcessar.value || !modeloId.value) return
@@ -315,6 +478,7 @@ async function extrair() {
   try {
     const resposta = await extrairArquivo(arquivo, modeloId.value)
     extracaoId.value = resposta.extracaoId
+    pedidoLido.value = null
 
     for (const campo of modeloAtual.value?.schema.campos ?? []) {
       camposCabecalho[campo.id] = resposta.dadosExtraidos.campos?.[campo.id] ?? ''
@@ -348,24 +512,102 @@ async function extrair() {
   }
 }
 
-/** Lê a planilha no navegador (sem IA) e sugere um mapeamento inicial de colunas pro usuário confirmar. */
-async function mapearPlanilha() {
+/** Põe a aba lida na tela, com o mapeamento da receita (ou, sem receita, o palpite pelo nome das colunas) e o cabeçalho. */
+function usarPedidoLido(lido: PedidoLido, receita: ReceitaLayout | null) {
+  pedidoLido.value = lido
+  receitaEmUso.value = receita
+  errosEtapas.value = lido.erros
+  colunasArquivo.value = lido.aba.colunas
+  linhasArquivo.value = lido.aba.linhas
+  mapeamentoColunas.value = receita
+    ? mapeamentoDaReceita(receita, lido.aba, camposAlvoAtual.value.map((c) => c.id))
+    : sugerirMapeamentoColunas(lido.aba.colunas, camposAlvoAtual.value)
+  const cabecalho = cabecalhoDoPedido(lido, receita, modeloAtual.value?.schema.campos ?? [])
+  for (const [id, valor] of Object.entries(cabecalho)) camposCabecalho[id] = valor
+}
+
+/**
+ * Descobre como ler a planilha e lê a aba do pedido. Ordem: o que ficou guardado desta loja
+ * (se o arquivo ainda tem o mesmo formato) → IA → regras do leitor. `forcarIa` pula a memória.
+ * Devolve `false` se não achou dado nenhum.
+ */
+async function entenderPlanilha(forcarIa = false): Promise<boolean> {
+  if (!grades.value.length || !modeloId.value) return false
+  falhaIa.value = ''
+  resumoIa.value = ''
+
+  const pedido = instrucoes.value.trim()
+  instrucoesLidas.value = pedido
+  const salvo = layoutSalvo.value
+  // instrução diferente da que gerou a receita guardada = o usuário quer outra leitura
+  if (salvo && !forcarIa && (salvo.instrucoes ?? '') === pedido) {
+    const lido = lerPedidoComLayoutGuardado(grades.value, salvo.receita, salvo.assinatura)
+    if (lido) {
+      origemLayout.value = 'memoria'
+      usarPedidoLido(lido, salvo.receita)
+      return true
+    }
+  }
+
+  try {
+    const analise = await $fetch<AnaliseLayout>('/api/importacoes/layout', {
+      method: 'POST',
+      body: {
+        modeloId: modeloId.value,
+        amostra: amostraDasAbas(grades.value, pedido),
+        instrucoes: pedido,
+        abas: grades.value.map((g) => g.nome)
+      }
+    })
+    const lido = lerPedido(grades.value, analise)
+    if (lido) {
+      origemLayout.value = 'ia'
+      resumoIa.value = analise.resumo
+      confiancaIa.value = analise.confianca
+      usarPedidoLido(lido, analise)
+      return true
+    }
+    falhaIa.value = 'A IA não achou os itens do pedido nesta planilha.'
+  } catch (e) {
+    const erro = e as any
+    falhaIa.value = erro?.data?.statusMessage || erro?.message || 'Não foi possível analisar a planilha com a IA.'
+  }
+
+  // sem IA, o que ficou guardado desta loja ainda é melhor que ligar as colunas só pelo nome
+  if (salvo) {
+    const lido = lerPedidoComLayoutGuardado(grades.value, salvo.receita, salvo.assinatura)
+    if (lido) {
+      origemLayout.value = 'memoria'
+      instrucoesLidas.value = salvo.instrucoes ?? ''
+      usarPedidoLido(lido, salvo.receita)
+      return true
+    }
+  }
+
+  const lido = lerPedido(grades.value, null)
+  if (!lido) return false
+  origemLayout.value = 'regras'
+  usarPedidoLido(lido, null)
+  return true
+}
+
+/** Lê a planilha no navegador e entende o formato dela (memória da loja → IA → regras) pro usuário conferir. */
+async function lerPlanilhaPedido() {
   const arquivo = arquivos.value[0]?.file
   if (!arquivo || !podeProcessar.value) return
 
   extraindo.value = true
   try {
-    const { colunas, linhas } = await lerPlanilha(arquivo)
-    if (!colunas.length || !linhas.length) {
-      toast.error('Não encontrei dados nessa planilha — confira se a primeira linha tem os cabeçalhos das colunas.')
+    for (const chave of Object.keys(camposCabecalho)) delete camposCabecalho[chave]
+    extracaoId.value = null
+    camposAlvoAtual.value = camposAlvoDoTemplate(modeloAtual.value?.schema.campos_item ?? [])
+    identificador.value = modeloAtual.value?.schema.identificador_produto ?? 'sku'
+    grades.value = await lerGradesPlanilha(arquivo)
+    if (!(await entenderPlanilha())) {
+      pedidoLido.value = null
+      toast.error('Não encontrei dados nessa planilha — confira se ela tem uma linha com os títulos das colunas.')
       return
     }
-
-    colunasArquivo.value = colunas
-    linhasArquivo.value = linhas
-    camposAlvoAtual.value = CAMPOS_ALVO_PADRAO
-    identificador.value = 'sku'
-    mapeamentoColunas.value = sugerirMapeamentoColunas(colunas, CAMPOS_ALVO_PADRAO)
     etapa.value = 'mapeamento'
   } catch {
     toast.error('Não foi possível ler essa planilha. Confira se o formato do arquivo está correto.')
@@ -374,10 +616,46 @@ async function mapearPlanilha() {
   }
 }
 
+async function analisarDeNovo() {
+  analisando.value = true
+  try {
+    await entenderPlanilha(true)
+  } finally {
+    analisando.value = false
+  }
+}
+
+/**
+ * Guarda no template como ler a planilha desta loja — a estrutura usada + o mapeamento que
+ * foi conferido — pra próxima dela entrar sem IA. Se não der pra guardar, o pedido já está
+ * salvo: só não fica lembrado.
+ */
+async function lembrarLayout() {
+  const lido = pedidoLido.value
+  if (!lido || !modeloId.value || !clienteId.value) return
+  try {
+    await modelos.salvarLayout(modeloId.value, clienteId.value, {
+      receita: receitaDoMapeamento(
+        { ...(receitaEmUso.value ?? receitaVazia()), aba: lido.aba.nome },
+        lido.aba,
+        mapeamentoColunas.value
+      ),
+      assinatura: lido.aba.assinatura,
+      // as que geraram esta leitura — texto mudado sem analisar de novo não entra
+      instrucoes: instrucoesLidas.value,
+      salvo_em: new Date().toISOString()
+    })
+  } catch {
+    toast.info('O pedido foi salvo, mas não consegui guardar o formato desta planilha pra próxima vez.')
+  }
+}
+
 /** Converte as linhas mapeadas em itens e já pré-seleciona o produto de cada um pelo código (ver `vincularProdutos`). */
 async function confirmarMapeamento() {
-  const linhasMapeadas = aplicarMapeamento(linhasArquivo.value, mapeamentoColunas.value)
-  const itens = itensDoMapeamento(linhasMapeadas, camposAlvoAtual.value)
+  const linhasMapeadas = aplicarMapeamento(linhasDoPedido.value, mapeamentoColunas.value)
+  let itens = itensDoMapeamento(linhasMapeadas, camposAlvoAtual.value)
+  // na planilha da loja, custo/preço sugerido não valem: o preço vem da tabela de preço (na revisão, ao escolher a fábrica)
+  if (pedidoLido.value) itens = itens.map((item) => ({ ...item, preco_unitario: 0 }))
 
   vinculando.value = true
   try {
@@ -406,9 +684,11 @@ async function salvar() {
       extracao_id: extracaoId.value,
       fabrica_id: fabricaId.value,
       referencia_id: referenciaId.value,
-      campos: { ...camposCabecalho },
+      // vai pra dados_extras: o bloco "Informações do pedido" da OC
+      campos: { informacoes: informacoesDoCabecalho(modeloAtual.value?.schema.campos ?? [], camposCabecalho) },
       itens: itensPedido.value
     })
+    await lembrarLayout()
     toast.success('Pedido salvo')
     await navigateTo(`/pedidos/${id}`)
   } catch (e) {

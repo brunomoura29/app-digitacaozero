@@ -1,4 +1,4 @@
-import type { CampoSchema, IdentificadorProduto, PapelCampoItem } from '~/types/modelo'
+import type { CampoSchema, IdentificadorProduto, PapelCampoItem, TipoCampo } from '~/types/modelo'
 import type { Produto } from '~/types/produto'
 
 export type StatusPedido = 'rascunho' | 'em_validacao' | 'em_aprovacao' | 'aprovado' | 'rejeitado' | 'enviado' | 'cancelado'
@@ -79,13 +79,14 @@ export interface PedidoInput {
 }
 
 /**
- * Normaliza um código de produto pra comparação: ignora espaços nas pontas, maiúsculas e
- * zeros à esquerda ("00123" = "123") — planilha e OCR costumam perder ou ganhar zeros.
+ * Normaliza um código de produto pra comparação: ignora maiúsculas, pontuação e espaços
+ * ("205.302.001" = "205302001" = "205 302-001") e zeros à esquerda ("00123" = "123") —
+ * planilha do cliente costuma formatar o código, e planilha e OCR perdem ou ganham zeros.
  */
 export function normalizarCodigo(v: unknown): string {
   return String(v ?? '')
-    .trim()
     .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
     .replace(/^0+(?=.)/, '')
 }
 
@@ -133,6 +134,46 @@ export interface PedidoEdicao {
   frete_valor: number
   fabrica_id: string | null
   referencia_id: string | null
+  /** Sem a chave, as informações do pedido ficam como estão. */
+  informacoes?: InformacaoPedido[]
+}
+
+/**
+ * Um campo do cabeçalho do template (Transportadora, Prazo, Vendedor…) com o valor deste pedido —
+ * vai pro bloco "Informações do pedido" da OC. Guarda o nome e o tipo junto: se o template mudar
+ * depois, a OC antiga continua igual. Fica em `dados_extras.informacoes`.
+ */
+export interface InformacaoPedido {
+  id: string
+  nome: string
+  tipo: TipoCampo
+  valor: string
+}
+
+/** As informações do pedido (de `dados_extras`, ou do cabeçalho da OC no link público) — lista vazia quando não há. */
+export function informacoesDoPedido(origem: { informacoes?: unknown } | null | undefined): InformacaoPedido[] {
+  const lista = origem?.informacoes
+  if (!Array.isArray(lista)) return []
+  return lista.filter(
+    (i): i is InformacaoPedido => !!i && typeof i === 'object' && typeof i.nome === 'string' && typeof i.valor === 'string'
+  )
+}
+
+/** Valores do cabeçalho do template (como ficam na tela de revisão) → informações do pedido. */
+export function informacoesDoCabecalho(campos: CampoSchema[], valores: Record<string, unknown>): InformacaoPedido[] {
+  return campos.map((campo) => {
+    const valor = valores[campo.id]
+    // sim/não desmarcado fica vazio (some da OC) — "Não" em todo pedido seria só ruído
+    const texto = campo.tipo === 'booleano' ? (valor ? 'Sim' : '') : valor == null ? '' : String(valor).trim()
+    // o nome do campo às vezes copia o rótulo da planilha ("TRANSPORTADORA: ") — na OC os dois-pontos já vêm do layout
+    return { id: campo.id, nome: campo.nome.trim().replace(/\s*:$/, ''), tipo: campo.tipo, valor: texto }
+  })
+}
+
+/** Valor como aparece na OC: data AAAA-MM-DD em dd/mm/aaaa, o resto como está. */
+export function exibirInformacao(info: InformacaoPedido): string {
+  const data = info.tipo === 'data' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(info.valor) : null
+  return data ? `${data[3]}/${data[2]}/${data[1]}` : info.valor
 }
 
 export interface PedidoFiltros {
@@ -189,6 +230,14 @@ function paraNumero(v: unknown): number {
   if (!s) return 0
   if (/,\d{1,2}$/.test(s)) return Number(s.replace(/\./g, '').replace(',', '.')) || 0
   return Number(s.replace(/[^\d.-]/g, '')) || 0
+}
+
+/**
+ * Planilha "catálogo com coluna de quantidade" (o cliente recebe a lista inteira da fábrica e
+ * preenche só o que quer): linha sem quantidade, ou com zero, não é item do pedido.
+ */
+export function temQuantidade(v: unknown): boolean {
+  return paraNumero(v) > 0
 }
 
 /** Campo alvo do mapeamento — ou um campo real do Template (extração por IA), ou um dos 4 papéis fixos (planilha, sem template). */

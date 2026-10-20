@@ -30,4 +30,6 @@ export interface CabecalhoOC {
   empresa: ParteOC | null
   cliente: ParteOC | null
   fabrica: string | null
+  /** "Informações do pedido" (ver `InformacaoPedido`) — o link público não lê `dados_extras` direto. */
+  informacoes?: unknown
 }
