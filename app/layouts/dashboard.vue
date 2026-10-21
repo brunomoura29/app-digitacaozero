@@ -87,6 +87,7 @@ const MODULO_POR_PREFIXO: [string, string][] = [
   ['/produtos', 'produtos'],
   ['/tabela-preco', 'tabela_preco'],
   ['/condicoes-pagamento', 'condicoes_pagamento'],
+  ['/fabricas', 'tabela_preco'],
   ['/pedidos', 'pedidos'],
   ['/relatorios', 'relatorios']
 ]
@@ -142,10 +143,13 @@ const nav = computed<SidebarItem[]>(() => {
     itens.push({ label: 'Pedidos', icon: 'heroicons:clipboard-document-list', to: '/pedidos' })
   }
 
+  // na ordem de começo no sistema: produtos (e fábricas, pra tabela de preço) → clientes
   const cadastros = [
+    auth.podeAcessarModulo('produtos') && { label: 'Produtos', icon: 'heroicons:cube', to: '/produtos' },
+    // fábricas não têm módulo próprio: a RLS libera pra quem acessa a tabela de preço
+    auth.podeAcessarModulo('tabela_preco') && { label: 'Fábricas', icon: 'heroicons:building-office-2', to: '/fabricas' },
     auth.podeAcessarModulo('clientes') && { label: 'Clientes', icon: 'heroicons:users', to: '/clientes' },
     auth.podeAcessarModulo('vendedores') && { label: 'Vendedores', icon: 'heroicons:user-group', to: '/vendedores' },
-    auth.podeAcessarModulo('produtos') && { label: 'Produtos', icon: 'heroicons:cube', to: '/produtos' },
     auth.podeAcessarModulo('condicoes_pagamento') && {
       label: 'Condições de pagamento',
       icon: 'heroicons:banknotes',
@@ -160,8 +164,9 @@ const nav = computed<SidebarItem[]>(() => {
     itens.push({ label: 'Tabela de preço', icon: 'heroicons:currency-dollar', to: '/tabela-preco' })
   }
   if (auth.isAdmin) {
-    itens.push({ label: 'Importações', icon: 'heroicons:arrow-down-on-square-stack', to: '/importacoes' })
+    // ordem de começo no sistema: produtos → tabela de preço → clientes → templates
     itens.push({ label: 'Templates', icon: 'heroicons:document-duplicate', to: '/templates' })
+    itens.push({ label: 'Importações', icon: 'heroicons:arrow-down-on-square-stack', to: '/importacoes' })
   }
   // montar relatório e liberar acesso de cliente é só do admin (as tabelas só aceitam ele)
   if (auth.isAdmin) {

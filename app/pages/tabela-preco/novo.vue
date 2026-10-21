@@ -28,7 +28,11 @@ async function salvar(payload: PrecoInput) {
   } catch (e) {
     console.error('Erro ao salvar preço:', e)
     const erro = e as any
-    toast.error(erro?.message || 'Não foi possível registrar o preço')
+    toast.error(
+      erro?.code === '23505'
+        ? 'Já existe preço desse produto nessa fábrica, tabela e mês — edite o registro existente'
+        : erro?.message || 'Não foi possível registrar o preço'
+    )
   } finally {
     salvando.value = false
   }

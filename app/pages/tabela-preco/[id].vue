@@ -55,7 +55,11 @@ async function salvar(payload: PrecoInput) {
     toast.success('Preço atualizado')
     await navigateTo('/tabela-preco')
   } catch (e) {
-    toast.error('Não foi possível salvar o preço')
+    toast.error(
+      (e as any)?.code === '23505'
+        ? 'Já existe outro preço desse produto nessa fábrica, tabela e mês'
+        : 'Não foi possível salvar o preço'
+    )
   } finally {
     salvando.value = false
   }

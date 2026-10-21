@@ -3,34 +3,60 @@ import type { Preco, PrecoFiltros, PrecoInput } from '~/types/preco'
 const COLUNAS =
   'id, empresa_id, produto_id, fabrica_id, referencia_id, data_registro, competencia, valor, criado_em, atualizado_em, produtos!inner(descricao, sku), fabricas(nome), referencias_tabela(nome)'
 
+export const PRECOS_POR_PAGINA_OPCOES = [25, 50, 100] as const
+
 /**
  * CRUD da tabela de preço — log histórico plano (uma linha por cotação de
  * produto+fábrica+competência). Estado compartilhado via `useState`.
+ * A lista é paginada no banco: com a importação por planilha são milhares de preços, e o
+ * Supabase devolve no máximo 1000 linhas por consulta.
  */
 export function usePrecos() {
   const supabase = useSupabaseClient()
 
+  /** Preços da página atual. */
   const itens = useState<Preco[]>('precos:itens', () => [])
   const carregando = useState<boolean>('precos:carregando', () => false)
   const filtros = useState<PrecoFiltros>('precos:filtros', () => ({ q: '', competencia: '' }))
+  const paginaAtual = useState<number>('precos:pagina:atual', () => 1)
+  const porPagina = useState<number>('precos:pagina:tamanho', () => 50)
+  const total = useState<number>('precos:pagina:total', () => 0)
 
-  /** Lista os preços aplicando os filtros atuais, mais recentes primeiro. */
-  async function carregar() {
+  /**
+   * Uma página de preços com os filtros atuais, mais recentes primeiro, e o total pra paginação.
+   * `pagina` omitida = recarrega a atual (ex.: depois de excluir/importar).
+   */
+  async function carregar(pagina = paginaAtual.value) {
     carregando.value = true
     try {
-      let query = supabase
-        .from('precos')
-        .select(COLUNAS)
-        .order('competencia', { ascending: false })
-        .order('criado_em', { ascending: false })
+      const montar = (p: number) => {
+        let query = supabase
+          .from('precos')
+          .select(COLUNAS, { count: 'exact' })
+          .order('competencia', { ascending: false })
+          .order('criado_em', { ascending: false })
+          .order('id', { ascending: true })
+          .range((p - 1) * porPagina.value, p * porPagina.value - 1)
 
-      const termo = filtros.value.q.trim()
-      if (termo) query = query.or(filtroContemEm(['descricao', 'sku'], termo), { referencedTable: 'produtos' })
-      if (filtros.value.competencia) query = query.eq('competencia', `${filtros.value.competencia}-01`)
+        const termo = filtros.value.q.trim()
+        if (termo) query = query.or(filtroContemEm(['descricao', 'sku'], termo), { referencedTable: 'produtos' })
+        if (filtros.value.competencia) query = query.eq('competencia', `${filtros.value.competencia}-01`)
+        return query
+      }
 
-      const { data, error } = await query
+      let { data, error, count } = await montar(pagina)
       if (error) throw error
+      // a página sumiu (excluiu os últimos, filtro diminuiu a lista): volta pra última que existe
+      const ultima = Math.max(1, Math.ceil((count ?? 0) / porPagina.value))
+      if (pagina > ultima) {
+        pagina = ultima
+        ;({ data, error, count } = await montar(pagina))
+        if (error) throw error
+      }
+
       itens.value = (data as unknown as Preco[]) ?? []
+      total.value = count ?? 0
+      paginaAtual.value = pagina
     } finally {
       carregando.value = false
     }
@@ -94,5 +120,5 @@ export function usePrecos() {
     return data ? Number(data.valor) : null
   }
 
-  return { itens, carregando, filtros, carregar, porId, buscarUm, criar, atualizar, remover, buscarAtual }
+  return { itens, carregando, filtros, paginaAtual, porPagina, total, carregar, porId, buscarUm, criar, atualizar, remover, buscarAtual }
 }
