@@ -45,4 +45,21 @@ export interface ClienteFiltros {
 }
 
 /** Abas da tela do cliente. */
-export type AbaCliente = 'dados' | 'politicas'
+export type AbaCliente = 'dados' | 'padroes' | 'politicas'
+
+/** Fábrica de quem o cliente compra, com a tabela de preço padrão (aba "Padrões do pedido"). */
+export interface ClienteFabrica {
+  id: string
+  cliente_id: string
+  fabrica_id: string
+  referencia_id: string | null
+  principal: boolean
+  fabricas: { nome: string } | null
+  referencias_tabela: { nome: string } | null
+}
+
+/** O que a importação do pedido preenche ao escolher o cliente. */
+export interface PadroesPedidoCliente {
+  modeloId: string | null
+  fabricas: ClienteFabrica[]
+}

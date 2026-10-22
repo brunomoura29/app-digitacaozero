@@ -53,13 +53,14 @@ export function useFabricas() {
       if (error) throw error
       return count ?? 0
     }
-    const [precos, pedidos, politicas, condicoes] = await Promise.all([
+    const [precos, pedidos, politicas, condicoes, clientes] = await Promise.all([
       contar('precos'),
       contar('pedidos'),
       contar('politicas_cliente'),
-      contar('condicoes_pagamento')
+      contar('condicoes_pagamento'),
+      contar('clientes_fabricas')
     ])
-    return { precos, pedidos, politicas, condicoes }
+    return { precos, pedidos, politicas, condicoes, clientes }
   }
 
   async function remover(id: string): Promise<void> {
@@ -76,4 +77,6 @@ export interface UsoFabrica {
   pedidos: number
   politicas: number
   condicoes: number
+  /** Clientes que têm a fábrica nos padrões do pedido (sai junto, on delete cascade). */
+  clientes: number
 }

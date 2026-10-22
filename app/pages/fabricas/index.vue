@@ -220,9 +220,12 @@ const mensagemExclusao = computed(() => {
     uso.condicoes && plural(uso.condicoes, 'condição de pagamento', 'condições de pagamento'),
     uso.politicas && plural(uso.politicas, 'política comercial', 'políticas comerciais')
   ].filter(Boolean)
+  const clientes = uso.clientes
+    ? ` Ela sai dos padrões do pedido de ${plural(uso.clientes, 'cliente', 'clientes')}.`
+    : ''
   return junto.length
-    ? `Excluir "${f.nome}"? Também serão excluídas ${junto.join(' e ')} dessa fábrica. Esta ação não pode ser desfeita.`
-    : `Excluir "${f.nome}"? Esta ação não pode ser desfeita.`
+    ? `Excluir "${f.nome}"? Também serão excluídas ${junto.join(' e ')} dessa fábrica.${clientes} Esta ação não pode ser desfeita.`
+    : `Excluir "${f.nome}"?${clientes} Esta ação não pode ser desfeita.`
 })
 
 async function confirmarExclusao() {

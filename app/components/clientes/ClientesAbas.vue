@@ -29,6 +29,7 @@ const emit = defineEmits<{ 'update:modelValue': [aba: AbaCliente] }>()
 
 const ABAS: { valor: AbaCliente; label: string; icone: string }[] = [
   { valor: 'dados', label: 'Dados do cliente', icone: 'heroicons:user' },
+  { valor: 'padroes', label: 'Padrões do pedido', icone: 'heroicons:adjustments-horizontal' },
   { valor: 'politicas', label: 'Políticas comerciais', icone: 'heroicons:receipt-percent' }
 ]
 </script>

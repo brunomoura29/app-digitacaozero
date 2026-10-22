@@ -29,6 +29,7 @@
         @submit="salvar"
         @cancelar="navigateTo('/clientes')"
       />
+      <ClientesPadroes v-if="aba === 'padroes'" :cliente-id="cliente.id" />
       <ClientesPoliticas v-if="aba === 'politicas'" :cliente-id="cliente.id" />
     </template>
   </div>
@@ -48,8 +49,8 @@ const id = route.params.id as string
 const cliente = ref<Cliente | null>(null)
 const pending = ref(true)
 const salvando = ref(false)
-// ?aba=politicas abre direto na aba de políticas
-const aba = ref<AbaCliente>(route.query.aba === 'politicas' ? 'politicas' : 'dados')
+// ?aba=politicas / ?aba=padroes abre direto na aba
+const aba = ref<AbaCliente>(route.query.aba === 'politicas' || route.query.aba === 'padroes' ? route.query.aba : 'dados')
 
 onMounted(async () => {
   try {

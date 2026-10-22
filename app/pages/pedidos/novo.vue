@@ -16,12 +16,15 @@
 
       <template v-else>
         <p class="text-sm text-shift3-text-secondary">
-          Escolha o template, o cliente e o documento — foto, PDF ou a planilha do jeito que a loja mandou. Na
+          Escolha o cliente, o template e o documento — foto, PDF ou a planilha do jeito que a loja mandou. Na
           planilha, a IA entende o formato na primeira vez e o sistema lembra dele nas próximas deste cliente.
         </p>
 
         <section class="space-y-4">
+          <!-- cliente primeiro: escolher ele já preenche o template (padrões do cadastro do cliente) -->
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ClientesClientePicker v-model="clienteId" />
+
             <div>
               <label class="mb-1 block text-sm font-medium text-shift3-text">Template *</label>
               <select
@@ -35,9 +38,45 @@
                 Nenhum template ativo — crie um em
                 <NuxtLink to="/templates" class="text-shift3-teal hover:underline">Templates</NuxtLink>.
               </p>
+              <p v-else-if="modeloId && modeloId === preenchidoAuto.modelo" class="mt-1 flex items-center gap-1 text-xs text-shift3-text-muted">
+                <Icon name="heroicons:adjustments-horizontal" class="h-3.5 w-3.5" /> Padrão do cadastro do cliente
+              </p>
             </div>
+          </div>
 
-            <ClientesClientePicker v-model="clienteId" />
+          <!-- cliente sem fábrica + tabela no cadastro: bloqueia e leva pra configurar -->
+          <div
+            v-if="clienteSemPadrao || statusPadroes === 'erro'"
+            class="flex flex-wrap items-start gap-3 rounded-medium border border-warning/40 bg-warning/10 p-4"
+          >
+            <Icon name="heroicons:exclamation-triangle" class="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+            <div class="min-w-0 flex-1 basis-64">
+              <p class="text-sm font-semibold text-shift3-text">
+                {{ statusPadroes === 'erro' ? 'Não foi possível ler o cadastro do cliente' : 'Este cliente ainda não tem fábrica e tabela de preço' }}
+              </p>
+              <p class="mt-0.5 text-sm text-shift3-text-secondary">
+                Defina no cadastro do cliente de quais fábricas ele compra e a tabela de cada uma — é dali que sai o preço
+                dos itens. Depois volte aqui e clique em “Já configurei”.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <BaseButton
+                v-if="auth.podeEditarModulo('clientes')"
+                :to="`/clientes/${clienteId}?aba=padroes`"
+                target="_blank"
+                variant="primary"
+                size="sm"
+                icon-left="heroicons:adjustments-horizontal"
+              >
+                Configurar cliente
+              </BaseButton>
+              <BaseButton variant="secondary" size="sm" icon-left="heroicons:arrow-path" @click="carregarPadroes(clienteId)">
+                Já configurei
+              </BaseButton>
+            </div>
+            <p v-if="!auth.podeEditarModulo('clientes')" class="w-full text-xs text-shift3-text-muted">
+              Você não tem permissão para editar clientes — peça ao administrador.
+            </p>
           </div>
 
           <BaseUpload
@@ -226,27 +265,29 @@
           <Icon name="heroicons:currency-dollar" class="h-5 w-5 text-shift3-teal" />
           <p class="text-base font-semibold text-shift3-text">Fábrica e lista de preço</p>
         </div>
+        <!-- só as fábricas do cadastro do cliente e as tabelas definidas lá -->
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <BaseBuscaOuCria
-            v-model="fabricaId"
-            label="Fábrica"
-            placeholder="Buscar fábrica ou digitar pra criar…"
-            :itens="fabricas.itens.value"
-            :carregando="fabricas.carregando.value"
-            :ao-criar="(nome) => fabricas.criar(nome)"
-          />
-          <BaseBuscaOuCria
-            v-model="referenciaId"
-            label="Referência da tabela"
-            placeholder="Ex: Preço fábrica, Distribuidor…"
-            :itens="referencias.itens.value"
-            :carregando="referencias.carregando.value"
-            :ao-criar="(nome) => referencias.criar(nome)"
-          />
+          <div>
+            <label for="fabrica-do-cliente" class="mb-2 block text-sm font-medium text-shift3-text">Fábrica</label>
+            <select id="fabrica-do-cliente" v-model="fabricaId" :class="CLASSE_SELECT">
+              <option :value="null" disabled>Selecione a fábrica</option>
+              <option v-for="f in fabricasUsaveis" :key="f.id" :value="f.fabrica_id">
+                {{ f.fabricas?.nome }}{{ f.principal ? ' (principal)' : '' }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label for="tabela-do-cliente" class="mb-2 block text-sm font-medium text-shift3-text">Referência da tabela</label>
+            <select id="tabela-do-cliente" v-model="referenciaId" :class="CLASSE_SELECT">
+              <option :value="null" disabled>Selecione a tabela</option>
+              <option v-for="t in tabelasDoCliente" :key="t.id" :value="t.id">{{ t.nome }}</option>
+            </select>
+          </div>
         </div>
         <p class="text-xs text-shift3-text-muted">
-          Escolha a fábrica pra preencher o preço unitário dos itens que já têm produto selecionado — e dos próximos
-          que você selecionar.
+          A fábrica preenche o preço unitário dos itens. Fábricas e tabelas vêm do
+          <NuxtLink :to="`/clientes/${clienteId}?aba=padroes`" target="_blank" class="text-shift3-teal hover:underline">
+            cadastro do cliente</NuxtLink>.
         </p>
       </section>
 
@@ -335,6 +376,8 @@ import {
 import { destinoDoModelo } from '~/types/modelo'
 import type { AnaliseLayout, IdentificadorProduto, ReceitaLayout } from '~/types/modelo'
 import type { CampoAlvo, PedidoItemInput } from '~/types/pedido'
+import type { ClienteFabrica, PadroesPedidoCliente } from '~/types/cliente'
+import { useAuthStore } from '~/stores/auth'
 import type { GradePlanilha } from '~/utils/gradePlanilha'
 import { amostraDasAbas, mapeamentoDaReceita, receitaDoMapeamento, receitaVazia } from '~/utils/layoutPlanilha'
 import { cabecalhoDoPedido, lerPedido, lerPedidoComLayoutGuardado } from '~/utils/pedidoPlanilha'
@@ -346,10 +389,9 @@ const modelos = useModelos()
 const { extrair: extrairArquivo } = useExtracao()
 const { criar } = usePedidos()
 const clientes = useClientes()
-const fabricas = useFabricas()
-const referencias = useReferenciasTabela()
 const produtos = useProdutos()
 const toast = useToast()
+const auth = useAuthStore()
 
 onMounted(() => {
   // a lista de produtos é compartilhada com a tela /produtos — um filtro esquecido lá
@@ -357,8 +399,6 @@ onMounted(() => {
   produtos.filtros.value = { q: '', ativo: 'todos' }
   modelos.carregar()
   clientes.carregar()
-  fabricas.carregar()
-  referencias.carregar()
 })
 
 // templates de "dados para análise" são usados em /importacoes, não aqui
@@ -418,7 +458,13 @@ const ehPlanilhaAtual = computed(() => {
 
 /** O que ainda falta preencher pra liberar o botão (vazio = tudo certo). */
 const faltando = computed(() =>
-  [!modeloId.value && 'template', !clienteId.value && 'cliente', !arquivos.value.length && 'arquivo']
+  [
+    !clienteId.value && 'cliente',
+    statusPadroes.value === 'carregando' && 'carregando o cadastro do cliente',
+    (clienteSemPadrao.value || statusPadroes.value === 'erro') && 'fábrica e tabela no cadastro do cliente',
+    !modeloId.value && 'template',
+    !arquivos.value.length && 'arquivo'
+  ]
     .filter(Boolean)
     .join(', ')
 )
@@ -449,6 +495,86 @@ const layoutSalvo = computed(() => (clienteId.value ? modeloAtual.value?.schema.
 watch([modeloId, clienteId], () => {
   instrucoes.value = layoutSalvo.value?.instrucoes ?? ''
 })
+
+// --- padrões do cliente (cadastro do cliente → aba "Padrões do pedido") ---
+// Escolher o cliente preenche template, fábrica principal e a tabela dela; trocar a fábrica puxa a
+// tabela que o cliente usa nela. Só preenche campo vazio ou que o próprio padrão tinha preenchido
+// — o que o usuário escolheu à mão fica.
+const padroesCliente = usePadroesCliente()
+const fabricasDoCliente = ref<ClienteFabrica[]>([])
+const preenchidoAuto = reactive<{ modelo: string | null; fabrica: string | null; referencia: string | null }>({
+  modelo: null,
+  fabrica: null,
+  referencia: null
+})
+
+/**
+ * Fábrica + tabela no cadastro do cliente é obrigatório pra importar: sem isso o pedido nasce sem
+ * preço certo. Fábrica sem tabela não conta (não aparece no pedido).
+ */
+const statusPadroes = ref<'vazio' | 'carregando' | 'ok' | 'erro'>('vazio')
+const fabricasUsaveis = computed(() => fabricasDoCliente.value.filter((f) => f.referencia_id))
+const clienteSemPadrao = computed(() => !!clienteId.value && statusPadroes.value === 'ok' && !fabricasUsaveis.value.length)
+
+watch(clienteId, (id) => carregarPadroes(id))
+
+async function carregarPadroes(id: string | null) {
+  fabricasDoCliente.value = []
+  statusPadroes.value = id ? 'carregando' : 'vazio'
+  if (!id) return
+  let padroes: PadroesPedidoCliente
+  try {
+    padroes = await padroesCliente.carregar(id)
+  } catch (e) {
+    console.error('Erro ao carregar padrões do cliente:', e)
+    if (clienteId.value === id) statusPadroes.value = 'erro'
+    return
+  }
+  if (clienteId.value !== id) return // trocou de cliente enquanto carregava
+
+  fabricasDoCliente.value = padroes.fabricas
+  statusPadroes.value = 'ok'
+  const modelo = padroes.modeloId
+  if (modelo && modelosAtivos.value.some((m) => m.id === modelo) && (!modeloId.value || modeloId.value === preenchidoAuto.modelo)) {
+    modeloId.value = modelo
+    preenchidoAuto.modelo = modelo
+  }
+  // a escolha fica restrita às fábricas do cadastro — fábrica de fora da lista (escolhida antes,
+  // de outro cliente) cede lugar à principal
+  const usaveis = fabricasUsaveis.value
+  const principal = usaveis.find((f) => f.principal) ?? usaveis[0]
+  const foraDaLista = !!fabricaId.value && !usaveis.some((f) => f.fabrica_id === fabricaId.value)
+  if (principal && (!fabricaId.value || fabricaId.value === preenchidoAuto.fabrica || foraDaLista)) {
+    fabricaId.value = principal.fabrica_id
+    preenchidoAuto.fabrica = principal.fabrica_id
+  }
+  if (fabricaId.value) aplicarTabelaDaFabrica(fabricaId.value)
+}
+
+watch(fabricaId, (id) => {
+  if (id) aplicarTabelaDaFabrica(id)
+})
+
+/** Tabelas que aparecem no cadastro do cliente (sem repetir) — as únicas oferecidas no pedido. */
+const tabelasDoCliente = computed(() => {
+  const vistas = new Map<string, string>()
+  for (const f of fabricasUsaveis.value) vistas.set(f.referencia_id!, f.referencias_tabela?.nome ?? '—')
+  return [...vistas].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome))
+})
+
+const CLASSE_SELECT =
+  'w-full rounded-default border border-shift3-input-border bg-shift3-input px-3 py-2 text-sm text-shift3-text outline-none transition focus:border-shift3-green focus:ring-2 focus:ring-shift3-green/20'
+
+/**
+ * Tabela da fábrica no cadastro do cliente. Com o cliente configurado, a tabela segue a fábrica
+ * sempre (a lista é restrita); sem configuração não há o que aplicar.
+ */
+function aplicarTabelaDaFabrica(id: string) {
+  const doCliente = fabricasUsaveis.value.find((f) => f.fabrica_id === id)
+  if (!doCliente) return
+  referenciaId.value = doCliente.referencia_id
+  preenchidoAuto.referencia = doCliente.referencia_id
+}
 
 /** Coluna do arquivo ligada ao campo de quantidade do template. */
 const colunaQuantidade = computed(() => {
