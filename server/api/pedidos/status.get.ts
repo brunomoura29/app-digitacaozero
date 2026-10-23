@@ -19,6 +19,16 @@ const SITUACOES: Record<string, string> = {
   cancelado: 'Cancelado'
 }
 
+/**
+ * O número é salvo como "OC-000016", mas quem pergunta costuma dizer "16", "000016" ou "oc 16"
+ * — todos viram o formato salvo. O texto original também entra, pra numeração fora do padrão.
+ */
+function variacoesDoNumero(numero: string): string[] {
+  const digitos = numero.replace(/\D/g, '')
+  if (!digitos) return [numero]
+  return [numero, `OC-${String(Number(digitos)).padStart(6, '0')}`]
+}
+
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const cabecalho = getHeader(event, 'authorization') ?? ''
@@ -36,7 +46,7 @@ export default defineEventHandler(async (event) => {
     .from('pedidos')
     .select('numero, status, data_emissao, prazo_entrega, total, decidido_em, clientes(nome), fabricas(nome)')
     .eq('empresa_id', (dono as { empresa_id: string }).empresa_id)
-    .eq('numero', numero)
+    .in('numero', variacoesDoNumero(numero))
   if (error) throw createError({ statusCode: 500, statusMessage: error.message })
 
   setHeader(event, 'Cache-Control', 'no-store')
