@@ -1,4 +1,5 @@
-import { serverSupabaseClient, serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
+import { serverSupabaseServiceRole } from '#supabase/server'
+import { contextoDoUsuario } from '../../utils/contextoUsuario'
 
 /**
  * Cria o login (perfis.papel='vendedor') de um vendedor já cadastrado.
@@ -6,18 +7,9 @@ import { serverSupabaseClient, serverSupabaseServiceRole, serverSupabaseUser } f
  * com `signUp` no client, porque trocaria a sessão do admin logado pela do vendedor novo.
  */
 export default defineEventHandler(async (event) => {
-  const user = await serverSupabaseUser(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
-
-  const client = await serverSupabaseClient(event)
-
-  const { data: perfil, error: erroPerfil } = await client
-    .from('perfis')
-    .select('empresa_id, papel')
-    .eq('id', user.sub)
-    .maybeSingle()
-  if (erroPerfil) throw createError({ statusCode: 500, statusMessage: erroPerfil.message })
-  if (!perfil || perfil.papel !== 'admin') {
+  const { client, empresaId, papel } = await contextoDoUsuario(event)
+  const perfil = { empresa_id: empresaId, papel }
+  if (perfil.papel !== 'admin') {
     throw createError({ statusCode: 403, statusMessage: 'Apenas administradores podem criar acessos.' })
   }
 

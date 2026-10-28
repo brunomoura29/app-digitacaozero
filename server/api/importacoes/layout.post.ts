@@ -1,5 +1,5 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { analisarLayoutPlanilha, mensagemErroIA } from '../../utils/claude'
+import { contextoDoUsuario } from '../../utils/contextoUsuario'
 import type { SchemaModelo } from '~/types/modelo'
 
 /** A amostra é montada no navegador (utils/layoutPlanilha.ts) e tem tamanho limitado por lá — isso aqui só barra abuso. */
@@ -17,17 +17,8 @@ const MAXIMO_ABAS = 100
  * e aí vêm também as `abas` do arquivo e a receita diz em qual está o pedido e onde está o cabeçalho.
  */
 export default defineEventHandler(async (event) => {
-  const user = await serverSupabaseUser(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
-
-  const client = await serverSupabaseClient(event)
-  const { data: perfil, error: erroPerfil } = await client
-    .from('perfis')
-    .select('empresa_id, papel')
-    .eq('id', user.sub)
-    .maybeSingle()
-  if (erroPerfil) throw createError({ statusCode: 500, statusMessage: erroPerfil.message })
-  if (!perfil) throw createError({ statusCode: 403, statusMessage: 'Perfil não encontrado' })
+  const { client, papel } = await contextoDoUsuario(event)
+  const perfil = { papel }
 
   const corpo = await readBody<{ modeloId?: unknown; amostra?: unknown; instrucoes?: unknown; abas?: unknown }>(event)
   const modeloId = typeof corpo?.modeloId === 'string' ? corpo.modeloId : ''

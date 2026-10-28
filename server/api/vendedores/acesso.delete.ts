@@ -1,19 +1,11 @@
-import { serverSupabaseClient, serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
+import { serverSupabaseServiceRole } from '#supabase/server'
+import { contextoDoUsuario } from '../../utils/contextoUsuario'
 
 /** Remove o login de um vendedor (perfis é apagado em cascata junto com o auth.users). */
 export default defineEventHandler(async (event) => {
-  const user = await serverSupabaseUser(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
-
-  const client = await serverSupabaseClient(event)
-
-  const { data: perfilAdmin, error: erroPerfilAdmin } = await client
-    .from('perfis')
-    .select('empresa_id, papel')
-    .eq('id', user.sub)
-    .maybeSingle()
-  if (erroPerfilAdmin) throw createError({ statusCode: 500, statusMessage: erroPerfilAdmin.message })
-  if (!perfilAdmin || perfilAdmin.papel !== 'admin') {
+  const { client, empresaId, papel } = await contextoDoUsuario(event)
+  const perfilAdmin = { empresa_id: empresaId, papel }
+  if (perfilAdmin.papel !== 'admin') {
     throw createError({ statusCode: 403, statusMessage: 'Apenas administradores podem remover acessos.' })
   }
 

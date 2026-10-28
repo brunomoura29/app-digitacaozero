@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import { serverSupabaseClient, serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
+import { serverSupabaseServiceRole } from '#supabase/server'
+import { contextoDoUsuario } from './contextoUsuario'
 import {
   camposDasFontes,
   type CampoRelatorio,
@@ -17,17 +18,11 @@ type Admin = ReturnType<typeof serverSupabaseServiceRole>
 
 /** Confere que quem chama é admin e devolve a empresa dele + o cliente service role. */
 export async function adminDaSessao(event: H3Event) {
-  const user = await serverSupabaseUser(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
-
-  const client = await serverSupabaseClient(event)
-  const { data: perfil, error } = await client.from('perfis').select('empresa_id, papel').eq('id', user.sub).maybeSingle()
-  if (error) throw createError({ statusCode: 500, statusMessage: error.message })
-  const dados = perfil as { empresa_id: string; papel: string } | null
-  if (!dados || dados.papel !== 'admin') {
+  const { empresaId, papel } = await contextoDoUsuario(event)
+  if (papel !== 'admin') {
     throw createError({ statusCode: 403, statusMessage: 'Só o administrador pode montar relatórios.' })
   }
-  return { admin: serverSupabaseServiceRole(event), empresaId: dados.empresa_id }
+  return { admin: serverSupabaseServiceRole(event), empresaId }
 }
 
 function soCampos(linha: LinhaRelatorio, campos: CampoRelatorio[]): LinhaRelatorio {

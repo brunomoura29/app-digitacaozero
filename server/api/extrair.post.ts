@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { serverSupabaseClient, serverSupabaseServiceRole, serverSupabaseUser } from '#supabase/server'
+import { serverSupabaseServiceRole } from '#supabase/server'
 import { extrairDocumento, verificarLegibilidade } from '../utils/claude'
+import { contextoDoUsuario } from '../utils/contextoUsuario'
 import type { SchemaModelo } from '~/types/modelo'
 
 const TIPOS_ACEITOS: Record<string, 'imagem' | 'pdf'> = {
@@ -35,19 +36,10 @@ function detectarMediaType(buffer: Buffer): string | null {
 }
 
 export default defineEventHandler(async (event) => {
-  const user = await serverSupabaseUser(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
-
-  const client = await serverSupabaseClient(event)
-
   // ── autorização: admin, ou vendedor com permissão de incluir em Pedidos ──
-  const { data: perfil, error: erroPerfil } = await client
-    .from('perfis')
-    .select('empresa_id, papel')
-    .eq('id', user.sub)
-    .maybeSingle()
-  if (erroPerfil) throw createError({ statusCode: 500, statusMessage: erroPerfil.message })
-  if (!perfil) throw createError({ statusCode: 403, statusMessage: 'Perfil não encontrado' })
+  // empresa/papel efetivos (o master em suporte grava na empresa que está atendendo)
+  const { client, user, empresaId, papel } = await contextoDoUsuario(event)
+  const perfil = { empresa_id: empresaId, papel }
 
   if (perfil.papel !== 'admin') {
     const { data: podeIncluir, error: erroPermissao } = await client.rpc('tem_permissao', {

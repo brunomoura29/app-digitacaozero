@@ -1,5 +1,22 @@
 <template>
-  <div class="flex h-screen overflow-hidden bg-shift3-sidebar">
+  <!-- assinatura bloqueada: o banco já não devolve nada da empresa — só a explicação e o Sair -->
+  <div v-if="auth.bloqueada" class="flex min-h-screen items-center justify-center bg-shift3-bg-light p-6">
+    <div class="w-full max-w-md rounded-large border border-shift3-border bg-shift3-bg-card p-8 text-center shadow-md">
+      <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger/15 text-danger">
+        <Icon name="heroicons:lock-closed" class="h-6 w-6" />
+      </span>
+      <h2 class="mt-4">Acesso suspenso</h2>
+      <p class="mt-2 text-sm text-shift3-text-secondary">
+        A assinatura de <strong>{{ auth.contexto?.empresa_nome || 'sua empresa' }}</strong> está suspensa ou vencida.
+        Seus dados continuam guardados — fale com o suporte pra liberar o acesso.
+      </p>
+      <BaseButton class="mt-6" variant="secondary" icon-left="heroicons:arrow-left-on-rectangle" @click="auth.sair()">
+        Sair
+      </BaseButton>
+    </div>
+  </div>
+
+  <div v-else class="flex h-screen overflow-hidden bg-shift3-sidebar">
     <AppSidebar
       v-model:collapsed="collapsed"
       :items="nav"
@@ -8,6 +25,40 @@
 
     <!-- Conteúdo (à direita) — canto côncavo na junção com o sidebar -->
     <div class="corner-concave flex min-w-0 flex-1 flex-col rounded-tl-[1.5rem] bg-shift3-bg-card">
+      <!-- master dentro de uma empresa: sempre visível, pra não esquecer onde está mexendo -->
+      <div
+        v-if="auth.emSuporte"
+        class="flex shrink-0 items-center gap-3 rounded-tl-[1.5rem] bg-shift3-dark px-6 py-2 text-sm text-white"
+      >
+        <Icon name="heroicons:lifebuoy" class="h-4 w-4 shrink-0 text-shift3-green" />
+        <span class="min-w-0 flex-1 truncate">
+          Você está no acesso de <strong>{{ auth.contexto?.empresa_nome }}</strong> como suporte
+        </span>
+        <button
+          type="button"
+          class="shrink-0 rounded-pill bg-shift3-green px-3 py-1 text-xs font-semibold text-shift3-dark transition hover:bg-white disabled:opacity-60"
+          :disabled="saindoDaEmpresa"
+          @click="sairDaEmpresa"
+        >
+          {{ saindoDaEmpresa ? 'Saindo…' : 'Sair da empresa' }}
+        </button>
+      </div>
+      <!-- assinatura vencida (nos dias de tolerância) ou em teste — o aviso de teste é só pro admin -->
+      <div
+        v-if="avisoAssinatura"
+        class="flex shrink-0 items-center gap-2 border-b px-6 py-2 text-sm"
+        :class="[
+          avisoAssinatura.tipo === 'vencida' ? 'border-warning/40 bg-warning/15 text-shift3-text' : 'border-shift3-border bg-shift3-bg-light text-shift3-text-secondary',
+          { 'rounded-tl-[1.5rem]': !auth.emSuporte }
+        ]"
+      >
+        <Icon
+          :name="avisoAssinatura.tipo === 'vencida' ? 'heroicons:exclamation-triangle' : 'heroicons:clock'"
+          class="h-4 w-4 shrink-0"
+          :class="avisoAssinatura.tipo === 'vencida' ? 'text-warning' : 'text-shift3-teal'"
+        />
+        {{ avisoAssinatura.texto }}
+      </div>
       <header
         class="flex h-16 shrink-0 items-center gap-4 rounded-tl-[1.5rem] border-b border-shift3-border/70 bg-shift3-bg-card/90 px-6 backdrop-blur"
       >
@@ -77,6 +128,43 @@ const mostrarAtalhoImportar = computed(
 )
 
 const auth = useAuthStore()
+const toast = useToast()
+
+const saindoDaEmpresa = ref(false)
+async function sairDaEmpresa() {
+  saindoDaEmpresa.value = true
+  try {
+    await auth.sairDaEmpresa()
+  } catch (e) {
+    console.error('Erro ao sair da empresa:', e)
+    toast.error('Não foi possível sair da empresa')
+    saindoDaEmpresa.value = false
+  }
+}
+
+/** Mesma tolerância do banco (situacao_assinatura): bloqueia 5 dias depois do vencimento. */
+const DIAS_TOLERANCIA = 5
+const avisoAssinatura = computed<{ tipo: 'vencida' | 'teste'; texto: string } | null>(() => {
+  const ctx = auth.contexto
+  if (!ctx?.vence_em) return null
+  const [a, m, d] = ctx.vence_em.split('-').map(Number) as [number, number, number]
+  const vence = new Date(a, m - 1, d)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const dias = Math.round((vence.getTime() - hoje.getTime()) / 86_400_000)
+  const data = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+  if (ctx.situacao === 'vencida') {
+    const restam = DIAS_TOLERANCIA + dias
+    return {
+      tipo: 'vencida',
+      texto: `A assinatura venceu em ${data}. O acesso será bloqueado ${restam <= 0 ? 'amanhã' : `em ${restam + 1} dias`} — fale com o suporte.`
+    }
+  }
+  if (ctx.situacao === 'teste' && auth.isAdmin) {
+    return { tipo: 'teste', texto: dias === 0 ? 'Seu período de teste termina hoje.' : `Período de teste até ${data} (${dias} ${dias === 1 ? 'dia' : 'dias'}).` }
+  }
+  return null
+})
 
 // Rotas restritas por módulo/papel — checadas aqui (não no middleware global) porque
 // dependem do perfil já carregado; fazer o middleware esperar isso causou instabilidade.
@@ -97,6 +185,10 @@ function comecaCom(path: string, prefixo: string) {
 function verificarAcessoRota() {
   if (!auth.perfil) return
   const path = route.path
+  if (comecaCom(path, '/master') && !auth.ehMaster) {
+    navigateTo('/')
+    return
+  }
   if (ROTAS_SOMENTE_ADMIN.some((p) => comecaCom(path, p)) && !auth.isAdmin) {
     navigateTo('/')
     return
@@ -182,6 +274,9 @@ const nav = computed<SidebarItem[]>(() => {
         { label: 'Funções de acesso', icon: 'heroicons:key', to: '/configuracoes/funcoes' }
       ]
     })
+  }
+  if (auth.ehMaster) {
+    itens.push({ label: 'Master', icon: 'heroicons:shield-check', to: '/master' })
   }
 
   return itens

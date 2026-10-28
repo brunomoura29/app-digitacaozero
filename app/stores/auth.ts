@@ -24,11 +24,26 @@ export interface Perfil {
   funcoes: { permissoes: Record<string, PermissaoModulo> } | null
 }
 
+/** 'teste' | 'ativa' | 'vencida' (nos 5 dias de tolerância) | 'bloqueada' — calculada no banco. */
+export type SituacaoAssinatura = 'teste' | 'ativa' | 'vencida' | 'bloqueada'
+
+/** Retorno de `meu_contexto()`: empresa/papel efetivos (o master em suporte vira admin da empresa atendida). */
+export interface ContextoUsuario {
+  empresa_id: string | null
+  papel: Perfil['papel'] | null
+  eh_master: boolean
+  em_suporte: boolean
+  empresa_nome: string | null
+  situacao: SituacaoAssinatura | null
+  vence_em: string | null
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const supabase = useSupabaseClient()
   const user = useSupabaseUser()
 
   const perfil = ref<Perfil | null>(null)
+  const contexto = ref<ContextoUsuario | null>(null)
   const carregandoPerfil = ref(false)
 
   const empresa = computed<Empresa | null>(() => perfil.value?.empresas ?? null)
@@ -39,6 +54,11 @@ export const useAuthStore = defineStore('auth', () => {
     () => perfil.value?.nome_completo || user.value?.email?.split('@')[0] || 'Usuário'
   )
   const email = computed(() => user.value?.email ?? null)
+
+  const ehMaster = computed(() => contexto.value?.eh_master ?? false)
+  const emSuporte = computed(() => contexto.value?.em_suporte ?? false)
+  /** O master nunca é bloqueado (nem a empresa que ele está atendendo). */
+  const bloqueada = computed(() => contexto.value?.situacao === 'bloqueada' && !ehMaster.value)
 
   /** Checa uma ação específica (ver/incluir/editar/deletar) num módulo — admin sempre pode tudo. */
   function temPermissao(modulo: string, acao: AcaoPermissao): boolean {
@@ -77,18 +97,30 @@ export const useAuthStore = defineStore('auth', () => {
     if (perfil.value?.id === uid && !force) return
     carregandoPerfil.value = true
     try {
-      const { data, error } = await supabase
-        .from('perfis')
-        .select(
-          'id, empresa_id, nome_completo, papel, cliente_id, vendedor_id, funcao_id, telefone, avatar_url, funcoes(permissoes)'
-        )
-        .eq('id', uid)
-        .maybeSingle()
-      if (error) throw error
-      perfil.value = (data as unknown as Perfil) ?? null
+      const [resPerfil, resContexto] = await Promise.all([
+        supabase
+          .from('perfis')
+          .select(
+            'id, empresa_id, nome_completo, papel, cliente_id, vendedor_id, funcao_id, telefone, avatar_url, funcoes(permissoes)'
+          )
+          .eq('id', uid)
+          .maybeSingle(),
+        supabase.rpc('meu_contexto')
+      ])
+      if (resPerfil.error) throw resPerfil.error
+      if (resContexto.error) throw resContexto.error
+      const ctx = (resContexto.data as ContextoUsuario | null) ?? null
+      const dados = (resPerfil.data as unknown as Perfil) ?? null
+      contexto.value = ctx
+      // empresa e papel efetivos: em suporte o master vê/age como admin da empresa atendida
+      perfil.value =
+        dados && ctx
+          ? { ...dados, empresa_id: ctx.empresa_id ?? dados.empresa_id, papel: ctx.papel ?? dados.papel }
+          : dados
     } catch (e) {
       console.error('[auth] falha ao carregar perfil:', e)
       perfil.value = null
+      contexto.value = null
     } finally {
       carregandoPerfil.value = false
     }
@@ -122,15 +154,33 @@ export const useAuthStore = defineStore('auth', () => {
     await carregarPerfil(true)
   }
 
+  /**
+   * Master: entra no acesso de uma empresa (ou volta pra própria). Recarrega a página inteira —
+   * os composables guardam listas em useState e precisam começar do zero na outra empresa.
+   */
+  async function entrarEmpresa(empresaId: string) {
+    const { error } = await supabase.rpc('master_entrar_empresa', { p_empresa: empresaId })
+    if (error) throw error
+    window.location.assign('/')
+  }
+
+  async function sairDaEmpresa() {
+    const { error } = await supabase.rpc('master_sair_empresa')
+    if (error) throw error
+    window.location.assign('/master')
+  }
+
   async function sair() {
     await supabase.auth.signOut()
     perfil.value = null
+    contexto.value = null
     await navigateTo('/login')
   }
 
   return {
     user,
     perfil,
+    contexto,
     empresa,
     carregandoPerfil,
     isAdmin,
@@ -138,6 +188,9 @@ export const useAuthStore = defineStore('auth', () => {
     isCliente,
     nome,
     email,
+    ehMaster,
+    emSuporte,
+    bloqueada,
     temPermissao,
     podeAcessarModulo,
     podeVerModulo,
@@ -147,6 +200,8 @@ export const useAuthStore = defineStore('auth', () => {
     carregarPerfil,
     cadastrar,
     entrar,
-    sair
+    sair,
+    entrarEmpresa,
+    sairDaEmpresa
   }
 })
